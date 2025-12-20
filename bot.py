@@ -136,8 +136,6 @@ def build_transcript_with_images(messages: list) -> list:
         images = []
         for att in msg.attachments:
             if att.content_type and att.content_type.startswith('image/'):
-                # Debug logging (optional - can be removed in production)
-                print(f"Image URL: {att.url}")
                 # Check if we've already processed this URL (or a proxy of it)
                 if att.url not in seen_images:
                     images.append(att)
@@ -167,12 +165,10 @@ def build_transcript_with_images(messages: list) -> list:
     # Flush any remaining text after the loop
     if current_text_block:
         user_content.append({"type": "text", "text": current_text_block})
-    
+
     return user_content
 
-# --- Slash Commands ---
-
-@bot.tree.command(name="summarize_thread", description="Summarizes the conversation in the current thread.")
+@bot.tree.command(name="summarize-thread", description="Summarizes the conversation in the current thread.")
 async def summarize_thread(interaction: discord.Interaction):
     
     if not isinstance(interaction.channel, discord.Thread):
@@ -209,7 +205,7 @@ async def summarize_thread(interaction: discord.Interaction):
         print(f"Error summarizing thread: {e}")
         await interaction.followup.send(f"An error occurred while trying to summarize. Error: {str(e)}")
 
-@bot.tree.command(name="summarize_channel", description="Summarizes channel messages within a time period (e.g., 2h, 1d).")
+@bot.tree.command(name="summarize-period", description="Summarizes channel messages within a time period (e.g., 2h, 1d).")
 async def summarize_channel(interaction: discord.Interaction, duration: str):
     
     delta = parse_duration(duration)
