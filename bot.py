@@ -93,8 +93,8 @@ async def generate_summary(user_content: list) -> str:
     return completion.choices[0].message.content
 
 def parse_duration(duration_str: str) -> timedelta:
-    """Parses a duration string (e.g., '1h', '30m', '2d') into a timedelta."""
-    match = re.match(r"(\d+)([mhdwd])", duration_str.lower())
+    """Parses a duration string (e.g., '1h', '30m', '2d', '1mo') into a timedelta."""
+    match = re.match(r"(\d+)(mo|[mhdw])", duration_str.lower())
     if not match:
         return None
     amount = int(match.group(1))
@@ -108,6 +108,8 @@ def parse_duration(duration_str: str) -> timedelta:
         return timedelta(days=amount)
     elif unit == 'w':
         return timedelta(weeks=amount)
+    elif unit == 'mo':
+        return timedelta(days=amount * 30)
     return None
 
 def build_transcript_with_images(messages: list) -> list:
@@ -211,7 +213,18 @@ async def summarize_channel(interaction: discord.Interaction, duration: str):
     
     delta = parse_duration(duration)
     if not delta:
-        await interaction.response.send_message("Invalid duration format. Use format like '1h', '30m', '2d'.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Invalid time period: '{duration}'.\n"
+            "Please use a valid number followed by a unit.\n"
+            "**Supported units:**\n"
+            "• `m` for minutes\n"
+            "• `h` for hours\n"
+            "• `d` for days\n"
+            "• `w` for weeks\n"
+            "• `mo` for months (30 days)\n\n"
+            "**Examples:** `30m`, `12h`, `1d`, `2w`, `1mo`.",
+            ephemeral=True
+        )
         return
 
     await interaction.response.defer(thinking=True)
