@@ -14,9 +14,9 @@ class DiscordAPI:
         """Displays "thinking" message"""
         await self.interaction.response.defer(thinking=True)
 
-    async def followup(self, message):
+    async def followup(self, message, **kwargs):
         """Sends response to thinking message"""
-        await self.interaction.followup.send(message)
+        await self.interaction.followup.send(message, **kwargs)
 
     async def send_message(self, message, **kwargs):
         """Sends a regular message"""
