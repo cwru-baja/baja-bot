@@ -1,20 +1,21 @@
 from datetime import datetime, timezone
 from typing import List, Dict
 
+from Notion.BaseNotion import BaseNotion
+from Notion.NotionAPI import NotionAPI
 from Notion.Property import Property
+from utils import parse_time_utc
 
 
-class Page:
-    def __init__(self, page_json: dict):
+class Page(BaseNotion):
+    def __init__(self, page_json: dict, client: NotionAPI):
+        super().__init__(client)
         self.raw_json: dict = page_json
         self.id: str = page_json["id"]
 
-        date_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-        raw_created_time = page_json["created_time"]
-        self.created_time: datetime = datetime.strptime(raw_created_time, date_format).replace(tzinfo=timezone.utc)
+        self.created_time: datetime = parse_time_utc(page_json["created_time"])
 
-        raw_modified_time = page_json["last_edited_time"]
-        self.last_edited_time: datetime = datetime.strptime(raw_modified_time, date_format).replace(tzinfo=timezone.utc)
+        self.last_edited_time: datetime = parse_time_utc(page_json["last_edited_time"])
 
         self.created_by: dict = page_json["created_by"]
         self.last_edited_by: dict = page_json["last_edited_by"]
@@ -41,3 +42,10 @@ class Page:
         if result is None:
             raise KeyError(f"Property {prop_title} not found")
         return result
+
+    async def update(self, property: Property, value: dict):
+        update_dict = {
+            property.title: value
+        }
+        self.client.pages.update(self.id,
+                                 properties=[update_dict])

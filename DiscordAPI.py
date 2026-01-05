@@ -1,5 +1,8 @@
 import discord
 
+from Notion.Page import Page
+from Notion.Property import Property
+
 
 class DiscordAPI:
     def __init__(self, interaction):
@@ -21,3 +24,4 @@ class DiscordAPI:
     async def send_message(self, message, **kwargs):
         """Sends a regular message"""
         await self.interaction.response.send_message(message, **kwargs)
+

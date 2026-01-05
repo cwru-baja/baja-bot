@@ -1,14 +1,20 @@
+import pyperclip
+import json
 from notion_client import AsyncClient
 
 from Notion.DataSourceQuery import DataSourceQuery
 
 
-class NotionAPI:
+class NotionAPI(AsyncClient):
     def __init__(self, token):
-        self.client = AsyncClient(auth=token)
-        self.token = token
+        super().__init__(auth=token)
+        # self.client = AsyncClient(auth=token)
+        # self.token = token
 
     async def query_data(self, data_source_id, **kwargs) -> DataSourceQuery:
-        raw_json = await self.client.data_sources.query(data_source_id, **kwargs)
+        raw_json = await self.data_sources.query(data_source_id, **kwargs)
         return DataSourceQuery(raw_json)
+
+    async def retrieve_data(self, data_source_id, **kwargs):
+        pyperclip.copy(json.dumps(await self.data_sources.retrieve(data_source_id, **kwargs)))
 

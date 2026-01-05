@@ -2,13 +2,14 @@ import os
 import sys
 import io
 import json
+from typing import List
 
 import discord
 import pyperclip
 import webcolors
-from discord import ButtonStyle, File
+from discord import ButtonStyle, File, SelectOption
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import View, Button, Select
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 
@@ -19,7 +20,7 @@ from Notion.NotionAPI import NotionAPI
 from Notion.Page import Page
 from Summarizer import Summarizer
 # from OpenAIAPI import OpenAIAPI
-from utils import parse_duration
+from utils import parse_duration, make_embed_from_part, make_part_title
 
 import tempfile
 import aiohttp
@@ -201,21 +202,47 @@ def make_part_callback(part: Page):
     embed = make_embed_from_part(part)
 
     async def callback(interaction: discord.Interaction):
+        view = await get_part_update_view(part)
         file = await get_part_drawing(part)
-        await interaction.response.send_message(embed=embed, files=[file] if file else [])
+        await interaction.response.send_message(embed=embed, files=[file] if file else [], view=view)
 
     return callback
+
+# TODO this is not done
+async def get_part_update_view(part: Page) -> View:
+    await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
+    # pyperclip.copy(json.dumps)
+    view = View()
+
+    selector = Select(
+        max_values=1,
+        placeholder="Design Status",
+        options=[
+            SelectOption(label="testa", value="testa"),
+            SelectOption(label="testb", value="testb")
+        ]
+    )
+    async def callback(interaction: discord.Interaction):
+        print(interaction.data["values"])
+        await interaction.response.send_message(interaction.data["values"])
+    selector.callback = callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(selector)
+    return view
 
 
 @bot.tree.command(name="get-part", description="Gets information about a specified part from notion.")
 async def get_part(interaction: discord.Interaction, search_term: str):
+    # await get_part_update_view(None)
+    # return
     logger.info(f"Part request: by \"{interaction.user.name}\" for \"{search_term}\"")
     discord_api = DiscordAPI(interaction)
 
     await discord_api.think()
     try:
 
-        filter_object = {"or": [
+        filter_object = {
+            "or": [
             {
                 "property": "Part Number",
                 "rich_text": {
@@ -250,18 +277,7 @@ async def get_part(interaction: discord.Interaction, search_term: str):
         # embeds = [generate_embed_from_part(part) for part in filtered_search_results]
 
         if len(filtered_search_results) > 1:
-            view = View(timeout=60)
-            for i, result in enumerate(filtered_search_results):
-                button = Button(
-                    label=str(i + 1),
-                    style=ButtonStyle.secondary,
-                )
-
-                # part_embed = make_embed_from_part(result)
-                callback = make_part_callback(result)
-
-                button.callback = callback
-                view.add_item(button)
+            view = await get_part_search_select_view(filtered_search_results)
 
             part_titles = [
                 make_part_title(part) for part in filtered_search_results]
@@ -271,10 +287,11 @@ async def get_part(interaction: discord.Interaction, search_term: str):
                  f"{"\n".join(f"{i}. {part_titles[i]}" for i, _ in enumerate(filtered_search_results))}")
             await discord_api.followup(message, view=view)
         else:
-
+            view = await get_part_update_view(filtered_search_results[0])
             file = await get_part_drawing(filtered_search_results[0])
             await discord_api.followup("", embed=make_embed_from_part(filtered_search_results[0]),
-                                       files=[file] if file else [])
+                                       files=[file] if file else [],
+                                       view=view)
     except Exception as e:
         logger.warning(f"Error getting part: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
@@ -283,73 +300,20 @@ async def get_part(interaction: discord.Interaction, search_term: str):
     return None
 
 
-def make_embed_from_part(part: Page) -> discord.Embed:
-    part_family = part.get_property("Part Family")
-    primary_designer = part.get_property("Primary Designer")
-    part_name = part.get_property("Part Name")
-    part_number = part.get_property("Part Number")
+async def get_part_search_select_view(filtered_search_results):
+    view = View(timeout=60)
+    for i, result in enumerate(filtered_search_results):
+        button = Button(
+            label=str(i + 1),
+            style=ButtonStyle.secondary,
+        )
 
-    color_str = part_family.value[0]["color"] if part_family else "gray"
+        # part_embed = make_embed_from_part(result)
+        callback = make_part_callback(result)
 
-    try:
-        hex_color = webcolors.name_to_hex(color_str)
-    except ValueError:
-        hex_color = webcolors.name_to_hex("gray")
-
-    designer_name = primary_designer.value[0]["name"]
-
-    # pyperclip.copy(json.dumps(part.raw_json))
-    part_title = make_part_title(part)
-
-    embed = discord.Embed(
-        title=part_title,
-        color=discord.Color.from_str(hex_color)
-    )
-
-    design_status = part.get_property("Design Status")
-    analysis_status = part.get_property("Analysis Status")
-    mfg_status = part.get_property("Mfg Status")
-    embed.add_field(name="Design Status", value=design_status.value["name"], inline=True) if design_status else None
-    embed.add_field(name="Analysis Status", value=analysis_status.value["name"],
-                    inline=True) if analysis_status else None
-    embed.add_field(name="Mfg Status", value=mfg_status.value["name"], inline=True) if mfg_status else None
-
-    po_status = part.get_property("PO Status")
-    embed.add_field(name="PO Status", value=po_status.value["name"], inline=False) if po_status else None
-
-    material = part.get_property("Material")
-    stock_shape = part.get_property("Stock Shape")
-    mfg_process = part.get_property("Mfg Process(es)")
-    embed.add_field(name="Material", value=material.value[0]["name"], inline=True) if material else None
-    embed.add_field(name="Stock Shape", value=stock_shape.value[0]["name"], inline=True) if stock_shape else None
-    if mfg_process:
-        machines = ", ".join([mach["name"] for mach in mfg_process.value])
-        embed.add_field(name="Machine", value=machines, inline=True)
-
-    # embed.add_field(name="Machine", value=mfg_process.value[0]["name"], inline=True) if mfg_process else None
-
-    qty_made = part.get_property("Qty Made")
-    qty_car = part.get_property("Qty on Car")
-    embed.add_field(name="Qty Made", value=qty_made.value if qty_made else "Not Reported", inline=True)
-    embed.add_field(name="Qty on Car", value=qty_car.value, inline=True) if qty_car else None
-
-    return embed
-
-
-def make_part_title(part):
-    part_name = part.get_property("Part Name")
-    part_number = part.get_property("Part Number")
-    part_name_val = part_name.value[0]["plain_text"].strip() if part_name else ""
-    part_num_val = part_number.value[0]["plain_text"].strip() if part_number else ""
-    if part_number and part_name:
-        part_title = f"{part_name_val}: {part_num_val}"
-    elif part_name:
-        part_title = f"{part_name_val}"
-    elif part_number:
-        part_title = f"{part_num_val}"
-    else:
-        part_title = f"No part name or number?"
-    return part_title
+        button.callback = callback
+        view.add_item(button)
+    return view
 
 
 bot.run(discord_token)
