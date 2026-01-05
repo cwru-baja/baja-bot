@@ -33,11 +33,11 @@ class Page:
 
         self.properties: List[Property] = [Property(title, prop_values) for title, prop_values in page_json["properties"].items()]
 
-        self._ordered_props: Dict[str, Property] = {prop.title: prop for prop in self.properties}
+        self._ordered_props: Dict[str, Property] = {prop.title.lower(): prop for prop in self.properties}
 
     def get_property(self, prop_title: str) -> Property:
         """Returns Property object with given name"""
-        result = self._ordered_props.get(prop_title, None)
+        result = self._ordered_props.get(prop_title.lower(), None)
         if result is None:
             raise KeyError(f"Property {prop_title} not found")
         return result

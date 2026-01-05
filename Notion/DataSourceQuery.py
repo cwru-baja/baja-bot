@@ -6,6 +6,7 @@ from Notion.Page import Page
 class DataSourceQuery:
     def __init__(self, query_json: dict):
         self.raw_json: dict = query_json
+
         self.request_id: str = query_json["request_id"]
 
         # TODO see what the format of this is

@@ -8,7 +8,7 @@ class NotionAPI:
         self.client = AsyncClient(auth=token)
         self.token = token
 
-    async def query_data(self, data_source_id, filter_obj) -> DataSourceQuery:
-        raw_json = await self.client.data_sources.query(data_source_id, filter=filter_obj)
+    async def query_data(self, data_source_id, **kwargs) -> DataSourceQuery:
+        raw_json = await self.client.data_sources.query(data_source_id, **kwargs)
         return DataSourceQuery(raw_json)
 
