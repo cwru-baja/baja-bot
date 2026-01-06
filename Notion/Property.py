@@ -1,9 +1,12 @@
 from Notion.BaseNotion import BaseNotion
-from Notion.NotionAPI import NotionAPI
+import typing
+
+if typing.TYPE_CHECKING:
+    from Notion.NotionAPI import NotionAPI
 
 
 class Property(BaseNotion):
-    def __init__(self, prop_title, prop_values: dict, client: NotionAPI):
+    def __init__(self, prop_title, prop_values: dict, client: "NotionAPI"):
         super().__init__(client)
         self.raw_json: dict = prop_values
         self.title: str = prop_title
@@ -17,3 +20,4 @@ class Property(BaseNotion):
 
     def __bool__(self):
         return self.is_set
+

@@ -210,20 +210,27 @@ def make_part_callback(part: Page):
 
 # TODO this is not done
 async def get_part_update_view(part: Page) -> View:
-    await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
-    # pyperclip.copy(json.dumps)
+    part_name = make_part_title(part)
+    prop_schema = await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
+    design_schema = prop_schema.get_property("Design Status").value["options"]
+    design_status = part.get_property("Design Status").value["name"]
     view = View()
 
+    options = [SelectOption(label=option["name"], value=option["name"], default=option["name"]==design_status) for option in design_schema]
     selector = Select(
         max_values=1,
         placeholder="Design Status",
-        options=[
-            SelectOption(label="testa", value="testa"),
-            SelectOption(label="testb", value="testb")
-        ]
+        options=options
     )
     async def callback(interaction: discord.Interaction):
-        print(interaction.data["values"])
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated design status for {part_name} to {selected}")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("Design Status"), {
+            "status": {
+                "name": selected
+            }
+        })
         await interaction.response.send_message(interaction.data["values"])
     selector.callback = callback
     # selector.callback = lambda interaction: print(interaction.data["values"])

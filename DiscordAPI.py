@@ -1,9 +1,3 @@
-import discord
-
-from Notion.Page import Page
-from Notion.Property import Property
-
-
 class DiscordAPI:
     def __init__(self, interaction):
         self.interaction = interaction
