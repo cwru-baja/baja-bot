@@ -79,7 +79,8 @@ def make_embed_from_part(part: "Page") -> discord.Embed:
 
     qty_made = part.get_property("Qty Made")
     qty_car = part.get_property("Qty on Car")
-    embed.add_field(name="Qty Made", value=qty_made.value if qty_made else "Not Reported", inline=True)
+
+    embed.add_field(name="Qty Made", value=qty_made.value if qty_made is not None else "Not Reported", inline=True)
     embed.add_field(name="Qty on Car", value=qty_car.value, inline=True) if qty_car else None
 
     return embed

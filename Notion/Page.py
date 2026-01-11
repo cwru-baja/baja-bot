@@ -14,6 +14,9 @@ if typing.TYPE_CHECKING:
 class Page(BaseNotion):
     def __init__(self, page_json: dict, client: "NotionAPI"):
         super().__init__(client)
+        self._parse_json(page_json)
+
+    def _parse_json(self, page_json):
         self.raw_json: dict = page_json
         self.id: str = page_json["id"]
 
@@ -55,3 +58,8 @@ class Page(BaseNotion):
         # print(update_dict)
         await self.client.pages.update(self.id,
                                        properties=update_dict)
+
+    async def refetch_page(self):
+        updated_page_json = await self.client.pages.retrieve(self.id)
+        self._parse_json(updated_page_json)
+        return self

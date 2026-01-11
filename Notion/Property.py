@@ -14,7 +14,7 @@ class Property(BaseNotion):
         self.id: str | None = prop_values.get("id", None)
         self.type: str = prop_values["type"]
 
-        self.value: dict = prop_values[self.type]
+        self.value: dict | int = prop_values[self.type]
 
         self.is_set = bool(self.value)
 

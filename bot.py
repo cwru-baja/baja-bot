@@ -208,6 +208,7 @@ def make_part_callback(part: Page):
 
     return callback
 
+
 # TODO this is not done
 async def get_part_update_view(part: Page) -> View:
     part_name = make_part_title(part)
@@ -216,12 +217,14 @@ async def get_part_update_view(part: Page) -> View:
     design_schema = prop_schema.get_property("Design Status").value["options"]
     design_status = part.get_property("Design Status").value["name"]
 
-    design_options = [SelectOption(label=f"Design status - {option["name"]}", value=option["name"], default=option["name"]==design_status) for option in design_schema]
+    design_options = [SelectOption(label=f"Design status - {option["name"]}", value=option["name"],
+                                   default=option["name"] == design_status) for option in design_schema]
     design_selector = Select(
         max_values=1,
         placeholder="Design Status",
         options=design_options
     )
+
     async def design_callback(interaction: discord.Interaction):
         await interaction.response.defer()
         selected = interaction.data["values"][0]
@@ -233,6 +236,7 @@ async def get_part_update_view(part: Page) -> View:
             }
         })
         await interaction.followup.send(f"Updated design status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
     design_selector.callback = design_callback
     # selector.callback = lambda interaction: print(interaction.data["values"])
     view.add_item(design_selector)
@@ -268,7 +272,7 @@ async def get_part_update_view(part: Page) -> View:
     mfg_status = part.get_property("Mfg Status").value["name"]
 
     mfg_options = [SelectOption(label=f"Mfg status - {option["name"]}", value=option["name"],
-                                   default=option["name"] == mfg_status) for option in mfg_schema]
+                                default=option["name"] == mfg_status) for option in mfg_schema]
     mfg_selector = Select(
         max_values=1,
         placeholder="Mfg Status",
@@ -291,6 +295,23 @@ async def get_part_update_view(part: Page) -> View:
     # selector.callback = lambda interaction: print(interaction.data["values"])
     view.add_item(mfg_selector)
 
+    make_button = Button(style=ButtonStyle.primary, label="Make Part")
+    parts_made_prop = part.get_property("Qty Made")
+
+    async def part_made_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        await part.refetch_page()
+        if not parts_made_prop:
+            new_parts = 1
+        else:
+            new_parts = parts_made_prop.value + 1
+        await part.update(parts_made_prop, {
+            "number": new_parts
+        })
+        await interaction.followup.send(f"Updated Qty Made for \"{part_name}\" to {new_parts}", ephemeral=True)
+    make_button.callback = part_made_callback
+    view.add_item(make_button)
+
     return view
 
 
@@ -306,19 +327,19 @@ async def get_part(interaction: discord.Interaction, search_term: str):
 
         filter_object = {
             "or": [
-            {
-                "property": "Part Number",
-                "rich_text": {
-                    "contains": search_term
+                {
+                    "property": "Part Number",
+                    "rich_text": {
+                        "contains": search_term
+                    }
+                },
+                {
+                    "property": "Part Name",
+                    "title": {
+                        "contains": search_term
+                    }
                 }
-            },
-            {
-                "property": "Part Name",
-                "title": {
-                    "contains": search_term
-                }
-            }
-        ]}
+            ]}
 
         sort_object = [
             {
