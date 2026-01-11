@@ -212,29 +212,85 @@ def make_part_callback(part: Page):
 async def get_part_update_view(part: Page) -> View:
     part_name = make_part_title(part)
     prop_schema = await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
+    view = View()
     design_schema = prop_schema.get_property("Design Status").value["options"]
     design_status = part.get_property("Design Status").value["name"]
-    view = View()
 
-    options = [SelectOption(label=option["name"], value=option["name"], default=option["name"]==design_status) for option in design_schema]
-    selector = Select(
+    design_options = [SelectOption(label=f"Design status - {option["name"]}", value=option["name"], default=option["name"]==design_status) for option in design_schema]
+    design_selector = Select(
         max_values=1,
         placeholder="Design Status",
-        options=options
+        options=design_options
     )
-    async def callback(interaction: discord.Interaction):
+    async def design_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
         selected = interaction.data["values"][0]
-        logging.info(f"Updated design status for {part_name} to {selected}")
+        logging.info(f"Updated design status for \"{part_name}\" to \"{selected}\"")
         # print(interaction.data["values"])
         await part.update(part.get_property("Design Status"), {
             "status": {
                 "name": selected
             }
         })
-        await interaction.response.send_message(interaction.data["values"])
-    selector.callback = callback
+        await interaction.followup.send(f"Updated design status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+    design_selector.callback = design_callback
     # selector.callback = lambda interaction: print(interaction.data["values"])
-    view.add_item(selector)
+    view.add_item(design_selector)
+
+    po_schema = prop_schema.get_property("PO Status").value["options"]
+    po_status = part.get_property("PO Status").value["name"]
+
+    po_options = [SelectOption(label=f"PO status - {option["name"]}", value=option["name"],
+                               default=option["name"] == po_status) for option in po_schema]
+    po_selector = Select(
+        max_values=1,
+        placeholder="Mfg Status",
+        options=po_options
+    )
+
+    async def po_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated po status for \"{part_name}\" to \"{selected}\"")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("PO Status"), {
+            "status": {
+                "name": selected
+            }
+        })
+        await interaction.followup.send(f"Updated po status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
+    po_selector.callback = po_callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(po_selector)
+
+    mfg_schema = prop_schema.get_property("Mfg Status").value["options"]
+    mfg_status = part.get_property("Mfg Status").value["name"]
+
+    mfg_options = [SelectOption(label=f"Mfg status - {option["name"]}", value=option["name"],
+                                   default=option["name"] == mfg_status) for option in mfg_schema]
+    mfg_selector = Select(
+        max_values=1,
+        placeholder="Mfg Status",
+        options=mfg_options
+    )
+
+    async def mfg_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated mfg status for \"{part_name}\" to \"{selected}\"")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("Mfg Status"), {
+            "status": {
+                "name": selected
+            }
+        })
+        await interaction.followup.send(f"Updated mfg status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
+    mfg_selector.callback = mfg_callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(mfg_selector)
+
     return view
 
 

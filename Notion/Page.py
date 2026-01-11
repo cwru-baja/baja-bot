@@ -10,6 +10,7 @@ import typing
 if typing.TYPE_CHECKING:
     from Notion.NotionAPI import NotionAPI
 
+
 class Page(BaseNotion):
     def __init__(self, page_json: dict, client: "NotionAPI"):
         super().__init__(client)
@@ -24,7 +25,7 @@ class Page(BaseNotion):
         self.last_edited_by: dict = page_json["last_edited_by"]
 
         # TODO fix
-        self.cover = page_json["cover"] # idk what this really is
+        self.cover = page_json["cover"]  # idk what this really is
         self.icon = page_json["icon"]
         self.parent = page_json["parent"]
 
@@ -35,7 +36,8 @@ class Page(BaseNotion):
         self.url: str = page_json["url"]
         self.public_url: str = page_json["public_url"]
 
-        self.properties: List[Property] = [Property(title, prop_values, self.client) for title, prop_values in page_json["properties"].items()]
+        self.properties: List[Property] = [Property(title, prop_values, self.client) for title, prop_values in
+                                           page_json["properties"].items()]
 
         self._ordered_props: Dict[str, Property] = {prop.title.lower(): prop for prop in self.properties}
 
@@ -46,11 +48,10 @@ class Page(BaseNotion):
             raise KeyError(f"Property {prop_title} not found")
         return result
 
-    # FIXME doesn't work
     async def update(self, property: Property, value: dict):
         update_dict = {
             property.title: value
         }
         # print(update_dict)
         await self.client.pages.update(self.id,
-                                 properties=[update_dict])
+                                       properties=update_dict)
