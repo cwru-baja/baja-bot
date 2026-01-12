@@ -1,3 +1,6 @@
 discord.py
-openai
-python-dotenv
+openai~=2.14.0
+python-dotenv~=1.2.1
+notion-client~=2.7.0
+webcolors~=25.10.0
+aiohttp~=3.13.2

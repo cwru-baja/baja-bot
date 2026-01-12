@@ -1,39 +1,80 @@
 import os
+import sys
+import io
+import json
+from typing import List
+
 import discord
+import pyperclip
+import webcolors
+from discord import ButtonStyle, File, SelectOption
 from discord.ext import commands
-from openai import AsyncOpenAI
+from discord.ui import View, Button, Select
 from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
-import re
+from datetime import datetime, timezone
+
+from AIAPI import AIAPI
+from DiscordAPI import DiscordAPI
+from LogFormatter import LogFormatter
+from Notion.NotionAPI import NotionAPI
+from Notion.Page import Page
+from Summarizer import Summarizer
+# from OpenAIAPI import OpenAIAPI
+from utils import parse_duration, make_embed_from_part, make_part_title
+
+import tempfile
+import aiohttp
+
+import logging
+
+ai_client: AIAPI = None
+bot: commands.Bot = None
+notion_client: NotionAPI = None
+
+PARTS_DATA_SOURCE_ID = "22d471ee-8bfe-8135-855c-000bba8ef8cc"
 
 # Load environment variables
 load_dotenv()
 
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+discord_token = os.getenv('DISCORD_TOKEN')
+openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+notion_token = os.getenv('NOTION_TOKEN')
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
+
+# logger = logging.getLogger()
+#
+# ch = logging.StreamHandler()
+# ch.setStream(sys.stdout)
+# ch.setLevel(logging.DEBUG)
+#
+# ch.setFormatter(LogFormatter())
+#
+# logger.addHandler(ch)
 
 # --- Validation Checks ---
-print(f"Current working directory: {os.getcwd()}")
-print(f"DISCORD_TOKEN loaded: {bool(DISCORD_TOKEN)}")
-if OPENROUTER_API_KEY:
-    print(f"OPENROUTER_API_KEY loaded: Yes (Starts with {OPENROUTER_API_KEY[:4]}...)")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"DISCORD_TOKEN loaded: {bool(discord_token)}")
+logger.info(f"NOTION_TOKEN loaded: {bool(notion_token)}")
+if openrouter_api_key:
+    logger.info(f"OPENROUTER_API_KEY loaded: Yes (Starts with {openrouter_api_key[:4]}...)")
 else:
-    print("OPENROUTER_API_KEY loaded: No")
+    logger.warning("OPENROUTER_API_KEY loaded: No")
 
-if not DISCORD_TOKEN or not OPENROUTER_API_KEY:
-    print("Error: DISCORD_TOKEN or OPENROUTER_API_KEY not found in .env file.")
+if not discord_token or not openrouter_api_key or not notion_token:
+    logger.error("Error: token not found in .env file.")
     exit(1)
 
-# --- OpenAI Configuration ---
-client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
-    default_headers={
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://discord.com",
-        "X-Title": "Discord Thread Summarizer",
-    }
-)
+# --- AI Configuration ---
+ai_client = AIAPI(openrouter_api_key)
+
+notion_client = NotionAPI(notion_token)
 
 # --- Discord Bot Configuration ---
 intents = discord.Intents.default()
@@ -44,176 +85,53 @@ intents.members = True  # Required for nicknames
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}')
+    logger.info(f'Logged in as {bot.user.name}')
     try:
         # Sync slash commands with Discord
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
-        print(f"Failed to sync commands: {e}")
+        logger.error(f"Failed to sync commands: {e}")
 
-async def generate_summary(user_content: list) -> str:
-    """Helper function to call LLM for summarization with strict rules."""
-    
-    # UPDATED: Focus on synthesis, grouping, and ignoring noise.
-    system_instruction = (
-        "You are a concise executive assistant summarizing a Discord conversation. "
-        "Your goal is to provide a high-level overview, not a play-by-play transcript.\n\n"
-        "Input: A transcript of text and attached images.\n"
-        "Task: Create a bulleted summary of the key topics discussed.\n\n"
-        "GUIDELINES:\n"
-        "1. IGNORE NOISE: completely ignore keyboard smashing (e.g., 'asdfjkl'), one-word reactions, and off-topic banter that leads nowhere.\n"
-        "2. GROUP TOPICS: Do not list messages chronologically. Group thoughts by topic (e.g., 'The group discussed the Aero Gas class requirements...').\n"
-        "3. SYNTHESIZE OPINIONS: Instead of 'User A liked it, User B liked it', say 'The group was generally excited about X'.\n"
-        "4. IMAGES: Integrate image descriptions into the context of the conversation (e.g., 'User shared a photo of a steak while discussing dinner') rather than listing them separately at the end.\n"
-        "5. BREVITY: Keep the summary under 150 words unless the transcript is massive.\n"
-        "6. FORMAT: Use bullet points for distinct topics."
-    )
 
-    messages_payload = [
-        {"role": "system", "content": system_instruction},
-        {"role": "user", "content": user_content}
-    ]
+@bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
+async def summarize(interaction: discord.Interaction):
+    logger.info(f"Summarize: by \"{interaction.user.name}\" in \"{interaction.channel.name}\"")
+    summarizer = Summarizer(ai_client)
+    discord_api = DiscordAPI(interaction)
+
+    await discord_api.think()
 
     try:
-        # Try primary robust model (Gemini 2.0 Flash)
-        completion = await client.chat.completions.create(
-            model="google/gemini-2.0-flash-001",
-            messages=messages_payload
-        )
-    except Exception as e:
-        print(f"Primary model failed: {e}. Falling back to auto...")
-        completion = await client.chat.completions.create(
-            model="openrouter/auto",
-            messages=messages_payload
-        )
-    
-    return completion.choices[0].message.content
+        # Fetch message history
+        messages = await discord_api.get_messages()
 
-def parse_duration(duration_str: str) -> timedelta:
-    """Parses a duration string (e.g., '1h', '30m', '2d', '1mo') into a timedelta."""
-    match = re.match(r"(\d+)(mo|[mhdw])", duration_str.lower())
-    if not match:
-        return None
-    amount = int(match.group(1))
-    unit = match.group(2)
-    
-    if unit == 'm':
-        return timedelta(minutes=amount)
-    elif unit == 'h':
-        return timedelta(hours=amount)
-    elif unit == 'd':
-        return timedelta(days=amount)
-    elif unit == 'w':
-        return timedelta(weeks=amount)
-    elif unit == 'mo':
-        return timedelta(days=amount * 30)
-    return None
-
-def build_transcript_with_images(messages: list) -> list:
-    """
-    Constructs the user content payload for the LLM, interleaving text and images.
-    Includes logic to deduplicate images (original vs thumbnail).
-    """
-    user_content = []
-    current_text_block = ""
-    
-    # Track seen image URLs to prevent duplicate "thumbnails" from being sent
-    seen_images = set()
-
-    for msg in messages:
-        if msg.author.bot:
-            continue
-
-        # Format timestamp and author (Using Nickname/Display Name)
-        timestamp = msg.created_at.strftime("%H:%M")
-        msg_header = f"[{timestamp}] {msg.author.display_name}: "
-
-        # Append text content if present
-        if msg.content:
-            current_text_block += f"{msg_header}{msg.content}\n"
-        
-        # Check for images and deduplicate
-        images = []
-        for att in msg.attachments:
-            if att.content_type and att.content_type.startswith('image/'):
-                # Check if we've already processed this URL (or a proxy of it)
-                if att.url not in seen_images:
-                    images.append(att)
-                    seen_images.add(att.url)
-
-        # Add image counter to help LLM understand there's only one image
-        if images:
-            # Add image count to text if message had no text content
-            if not msg.content:
-                current_text_block += f"{msg_header}[Attached {len(images)} image(s)]\n"
-            else:
-                # If there was text content, append the image count
-                current_text_block += f"[Attached {len(images)} image(s)]\n"
-            
-            # Flush accumulated text before adding images
-            if current_text_block:
-                user_content.append({"type": "text", "text": current_text_block})
-                current_text_block = ""
-            
-            # Add images
-            for img in images:
-                user_content.append({
-                    "type": "image_url", 
-                    "image_url": {"url": img.url}
-                })
-
-    # Flush any remaining text after the loop
-    if current_text_block:
-        user_content.append({"type": "text", "text": current_text_block})
-
-    return user_content
-
-@bot.tree.command(name="summarize-thread", description="Summarizes the conversation in the current thread.")
-async def summarize_thread(interaction: discord.Interaction):
-    
-    if not isinstance(interaction.channel, discord.Thread):
-        await interaction.response.send_message("This command can only be used inside a thread.", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-
-    try:
-        # Fetch message history (limit to last 100 messages)
-        messages = [message async for message in interaction.channel.history(limit=100, oldest_first=True)]
-        
         if not messages:
-            await interaction.followup.send("No messages found in this thread to summarize.")
+            await discord_api.followup("No messages found in this thread to summarize.")
             return
 
-        # Prepare content (Text + Images)
-        transcript_content = build_transcript_with_images(messages)
-
-        if not transcript_content:
-            await interaction.followup.send("Not enough content to summarize.")
-            return
-
-        summary = await generate_summary(transcript_content)
-        
-        if summary:
-            if len(summary) > 2000:
-                summary = summary[:1997] + "..."
-            await interaction.followup.send(f"**Thread Summary:**\n{summary}")
-        else:
-            await interaction.followup.send("Failed to generate a summary.")
+        summary = await summarizer.get_summary(messages)
+        await interaction.followup.send(summary)
 
     except Exception as e:
-        print(f"Error summarizing thread: {e}")
-        await interaction.followup.send(f"An error occurred while trying to summarize. Error: {str(e)}")
+        logger.warning(f"Error summarizing thread: {e}")
+        await discord_api.followup(f"An error occurred while trying to summarize. Error: {str(e)}")
 
-@bot.tree.command(name="summarize-period", description="Summarizes channel messages within a time period (e.g., 2h, 1d).")
-async def summarize_channel(interaction: discord.Interaction, duration: str):
-    
+
+@bot.tree.command(name="summarize-period", description="Summarizes messages within a time period (e.g., 2h, 1d).")
+async def summarize_period(interaction: discord.Interaction, duration: str):
+    logger.info(
+        f"Summarize-period: by \"{interaction.user.name}\" in \"{interaction.channel.name}\" for \"{duration}\"")
+
+    summarizer = Summarizer(ai_client)
+    discord_api = DiscordAPI(interaction)
+
     delta = parse_duration(duration)
     if not delta:
-        await interaction.response.send_message(
+        await discord_api.send_message(
             f"Invalid time period: '{duration}'.\n"
             "Please use a valid number followed by a unit.\n"
             "**Supported units:**\n"
@@ -227,37 +145,259 @@ async def summarize_channel(interaction: discord.Interaction, duration: str):
         )
         return
 
-    await interaction.response.defer(thinking=True)
+    await discord_api.think()
 
     try:
         cutoff_time = datetime.now(timezone.utc) - delta
-        
-        # Limit set to 500 to prevent overload
-        messages = [message async for message in interaction.channel.history(after=cutoff_time, limit=500, oldest_first=True)]
+
+        messages = await discord_api.get_messages(after=cutoff_time)
 
         if not messages:
-            await interaction.followup.send(f"No messages found in the last {duration}.")
+            await discord_api.followup(f"No messages found in the last {duration}.")
             return
 
-        # Prepare content (Text + Images)
-        transcript_content = build_transcript_with_images(messages)
+        summary = await summarizer.get_summary(messages)
+        await discord_api.followup(summary)
 
-        if not transcript_content:
-            await interaction.followup.send(f"Not enough content to summarize in the last {duration}.")
-            return
-
-        summary = await generate_summary(transcript_content)
-
-        if summary:
-            if len(summary) > 2000:
-                summary = summary[:1997] + "..."
-            await interaction.followup.send(f"**Channel Summary ({duration}):**\n{summary}")
-        else:
-            await interaction.followup.send("Failed to generate a summary.")
 
     except Exception as e:
-        print(f"Error summarizing channel: {e}")
-        await interaction.followup.send(f"An error occurred: {str(e)}")
+        logger.warning(f"Error summarizing channel: {e}")
+        await discord_api.followup(f"An error occurred: {str(e)}")
 
-if __name__ == "__main__":
-    bot.run(DISCORD_TOKEN)
+
+async def get_part_drawing(part: Page) -> File | None:
+    # fd, path = tempfile.mkstemp()
+    # os.close(fd)
+
+    file_prop = part.get_property("Drawing (PDF)/DXF")
+    if not file_prop:
+        return None
+    url = file_prop.value[0]["file"]["url"]
+    file_name = file_prop.value[0]["name"]
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                resp.raise_for_status()
+
+                data = await resp.read()  # read all content into memory
+                file_buffer = io.BytesIO(data)  # create an in-memory file
+                file_buffer.seek(0)  # make sure we're at the start
+
+                return discord.File(file_buffer, file_name)
+    except Exception as e:
+        return None
+        # await interaction.response.send_message(
+        #     file=discord.File(file_buffer, filename=file_name)
+        # )
+        # await interaction.response.send_message(file=discord.File(tmp, filename=file_name))
+    #
+    # finally:
+    #     # Always delete the local file
+    #     if os.path.exists(path):
+    #         os.remove(path)
+
+
+def make_part_callback(part: Page):
+    embed = make_embed_from_part(part)
+
+    async def callback(interaction: discord.Interaction):
+        view = await get_part_update_view(part)
+        file = await get_part_drawing(part)
+        await interaction.response.send_message(embed=embed, files=[file] if file else [], view=view)
+
+    return callback
+
+
+# TODO this is not done
+async def get_part_update_view(part: Page) -> View:
+    part_name = make_part_title(part)
+    prop_schema = await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
+    view = View()
+    design_schema = prop_schema.get_property("Design Status").value["options"]
+    design_status = part.get_property("Design Status").value["name"]
+
+    design_options = [SelectOption(label=f"Design status - {option["name"]}", value=option["name"],
+                                   default=option["name"] == design_status) for option in design_schema]
+    design_selector = Select(
+        max_values=1,
+        placeholder="Design Status",
+        options=design_options
+    )
+
+    async def design_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated design status for \"{part_name}\" to \"{selected}\"")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("Design Status"), {
+            "status": {
+                "name": selected
+            }
+        })
+        await interaction.followup.send(f"Updated design status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
+    design_selector.callback = design_callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(design_selector)
+
+    po_schema = prop_schema.get_property("PO Status").value["options"]
+    po_status = part.get_property("PO Status").value["name"]
+
+    po_options = [SelectOption(label=f"PO status - {option["name"]}", value=option["name"],
+                               default=option["name"] == po_status) for option in po_schema]
+    po_selector = Select(
+        max_values=1,
+        placeholder="Mfg Status",
+        options=po_options
+    )
+
+    async def po_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated po status for \"{part_name}\" to \"{selected}\"")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("PO Status"), {
+            "status": {
+                "name": selected
+            }
+        })
+        await interaction.followup.send(f"Updated po status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
+    po_selector.callback = po_callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(po_selector)
+
+    mfg_schema = prop_schema.get_property("Mfg Status").value["options"]
+    mfg_status = part.get_property("Mfg Status").value["name"]
+
+    mfg_options = [SelectOption(label=f"Mfg status - {option["name"]}", value=option["name"],
+                                default=option["name"] == mfg_status) for option in mfg_schema]
+    mfg_selector = Select(
+        max_values=1,
+        placeholder="Mfg Status",
+        options=mfg_options
+    )
+
+    async def mfg_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        selected = interaction.data["values"][0]
+        logging.info(f"Updated mfg status for \"{part_name}\" to \"{selected}\"")
+        # print(interaction.data["values"])
+        await part.update(part.get_property("Mfg Status"), {
+            "status": {
+                "name": selected
+            }
+        })
+        await interaction.followup.send(f"Updated mfg status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+
+    mfg_selector.callback = mfg_callback
+    # selector.callback = lambda interaction: print(interaction.data["values"])
+    view.add_item(mfg_selector)
+
+    make_button = Button(style=ButtonStyle.primary, label="Make Part")
+    parts_made_prop = part.get_property("Qty Made")
+
+    async def part_made_callback(interaction: discord.Interaction):
+        await interaction.response.defer()
+        await part.refetch_page()
+        if not parts_made_prop:
+            new_parts = 1
+        else:
+            new_parts = parts_made_prop.value + 1
+        await part.update(parts_made_prop, {
+            "number": new_parts
+        })
+        await interaction.followup.send(f"Updated Qty Made for \"{part_name}\" to {new_parts}", ephemeral=True)
+    make_button.callback = part_made_callback
+    view.add_item(make_button)
+
+    return view
+
+
+@bot.tree.command(name="get-part", description="Gets information about a specified part from notion.")
+async def get_part(interaction: discord.Interaction, search_term: str):
+    # await get_part_update_view(None)
+    # return
+    logger.info(f"Part request: by \"{interaction.user.name}\" for \"{search_term}\"")
+    discord_api = DiscordAPI(interaction)
+
+    await discord_api.think()
+    try:
+
+        filter_object = {
+            "or": [
+                {
+                    "property": "Part Number",
+                    "rich_text": {
+                        "contains": search_term
+                    }
+                },
+                {
+                    "property": "Part Name",
+                    "title": {
+                        "contains": search_term
+                    }
+                }
+            ]}
+
+        sort_object = [
+            {
+                "timestamp": "last_edited_time",
+                "direction": "descending"
+            }
+        ]
+
+        base_result = await notion_client.query_data(PARTS_DATA_SOURCE_ID, filter=filter_object, sorts=sort_object)
+        search_results = base_result.results
+        has_more = base_result.has_more
+        if not len(search_results):
+            await discord_api.followup(f"No results found for part '{search_term}'.")
+            return None
+
+        max_parts = 5
+        filtered_search_results = search_results[:max_parts]
+        did_truncate = len(search_results) > max_parts or has_more
+        # embeds = [generate_embed_from_part(part) for part in filtered_search_results]
+
+        if len(filtered_search_results) > 1:
+            view = await get_part_search_select_view(filtered_search_results)
+
+            part_titles = [
+                make_part_title(part) for part in filtered_search_results]
+            message = \
+                (f"Search results for: \"{search_term}\" {"(truncated)" if did_truncate else ""}:\n"
+                 "Click button for more info.\n"
+                 f"{"\n".join(f"{i}. {part_titles[i]}" for i, _ in enumerate(filtered_search_results))}")
+            await discord_api.followup(message, view=view)
+        else:
+            view = await get_part_update_view(filtered_search_results[0])
+            file = await get_part_drawing(filtered_search_results[0])
+            await discord_api.followup("", embed=make_embed_from_part(filtered_search_results[0]),
+                                       files=[file] if file else [],
+                                       view=view)
+    except Exception as e:
+        logger.warning(f"Error getting part: {e}")
+        await discord_api.followup(f"An error occurred: {str(e)}")
+        raise e
+
+    return None
+
+
+async def get_part_search_select_view(filtered_search_results):
+    view = View(timeout=60)
+    for i, result in enumerate(filtered_search_results):
+        button = Button(
+            label=str(i + 1),
+            style=ButtonStyle.secondary,
+        )
+
+        # part_embed = make_embed_from_part(result)
+        callback = make_part_callback(result)
+
+        button.callback = callback
+        view.add_item(button)
+    return view
+
+
+bot.run(discord_token)
