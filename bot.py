@@ -227,7 +227,7 @@ async def get_part_update_view(part: Page) -> View:
                 "name": selected
             }
         })
-        await interaction.followup.send(f"Updated design status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+        await interaction.followup.send(f"Updated design status for \"{part_name}\" to \"{selected}\"")
 
     design_selector.callback = design_callback
     # selector.callback = lambda interaction: print(interaction.data["values"])
@@ -254,7 +254,7 @@ async def get_part_update_view(part: Page) -> View:
                 "name": selected
             }
         })
-        await interaction.followup.send(f"Updated po status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+        await interaction.followup.send(f"Updated po status for \"{part_name}\" to \"{selected}\"")
 
     po_selector.callback = po_callback
     # selector.callback = lambda interaction: print(interaction.data["values"])
@@ -281,7 +281,7 @@ async def get_part_update_view(part: Page) -> View:
                 "name": selected
             }
         })
-        await interaction.followup.send(f"Updated mfg status for \"{part_name}\" to \"{selected}\"", ephemeral=True)
+        await interaction.followup.send(f"Updated mfg status for \"{part_name}\" to \"{selected}\"")
 
     mfg_selector.callback = mfg_callback
     # selector.callback = lambda interaction: print(interaction.data["values"])
@@ -300,7 +300,7 @@ async def get_part_update_view(part: Page) -> View:
         await part.update(parts_made_prop, {
             "number": new_parts
         })
-        await interaction.followup.send(f"Updated Qty Made for \"{part_name}\" to {new_parts}", ephemeral=True)
+        await interaction.followup.send(f"Updated Qty Made for \"{part_name}\" to {new_parts}")
     make_button.callback = part_made_callback
     view.add_item(make_button)
 
