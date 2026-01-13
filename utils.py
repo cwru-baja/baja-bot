@@ -4,11 +4,9 @@ from datetime import timedelta, datetime, timezone
 
 import discord
 import webcolors
-from tqdm.contrib import discord
 
 if typing.TYPE_CHECKING:
     from Notion.Page import Page
-
 
 
 def parse_duration(duration_str) -> timedelta:
