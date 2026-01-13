@@ -1,5 +1,5 @@
-import pyperclip
-import json
+# import pyperclip
+# import json
 from notion_client import AsyncClient
 
 from Notion.DataSource import DataSource

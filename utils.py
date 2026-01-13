@@ -1,11 +1,10 @@
-from datetime import timedelta, datetime, timezone
 import re
-
-import webcolors
-from tqdm.contrib import discord
+import typing
+from datetime import timedelta, datetime, timezone
 
 import discord
-import typing
+import webcolors
+from tqdm.contrib import discord
 
 if typing.TYPE_CHECKING:
     from Notion.Page import Page

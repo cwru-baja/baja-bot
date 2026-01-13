@@ -1,11 +1,10 @@
-from datetime import datetime, timezone
+import typing
+from datetime import datetime
 from typing import List, Dict
 
 from Notion.BaseNotion import BaseNotion
 from Notion.Property import Property
 from utils import parse_time_utc
-
-import typing
 
 if typing.TYPE_CHECKING:
     from Notion.NotionAPI import NotionAPI

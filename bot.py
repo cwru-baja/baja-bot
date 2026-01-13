@@ -1,31 +1,23 @@
+import io
+import logging
 import os
 import sys
-import io
-import json
-from typing import List
+from datetime import datetime, timezone
 
+import aiohttp
 import discord
-import pyperclip
-import webcolors
 from discord import ButtonStyle, File, SelectOption
 from discord.ext import commands
 from discord.ui import View, Button, Select
 from dotenv import load_dotenv
-from datetime import datetime, timezone
 
 from AIAPI import AIAPI
 from DiscordAPI import DiscordAPI
-from LogFormatter import LogFormatter
 from Notion.NotionAPI import NotionAPI
 from Notion.Page import Page
 from Summarizer import Summarizer
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title
-
-import tempfile
-import aiohttp
-
-import logging
 
 ai_client: AIAPI = None
 bot: commands.Bot = None

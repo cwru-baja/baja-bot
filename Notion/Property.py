@@ -1,5 +1,6 @@
-from Notion.BaseNotion import BaseNotion
 import typing
+
+from Notion.BaseNotion import BaseNotion
 
 if typing.TYPE_CHECKING:
     from Notion.NotionAPI import NotionAPI

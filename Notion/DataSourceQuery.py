@@ -1,9 +1,8 @@
+import typing
 from typing import List
 
 from Notion.BaseNotion import BaseNotion
 from Notion.Page import Page
-
-import typing
 
 if typing.TYPE_CHECKING:
     from Notion.NotionAPI import NotionAPI
