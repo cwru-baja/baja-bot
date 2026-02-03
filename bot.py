@@ -19,6 +19,10 @@ from Summarizer import Summarizer
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title
 
+
+# Bot config values
+messages_before_rename = 10
+
 ai_client: AIAPI = None
 bot: commands.Bot = None
 notion_client: NotionAPI = None
@@ -40,15 +44,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# logger = logging.getLogger()
-#
-# ch = logging.StreamHandler()
-# ch.setStream(sys.stdout)
-# ch.setLevel(logging.DEBUG)
-#
-# ch.setFormatter(LogFormatter())
-#
-# logger.addHandler(ch)
 
 # --- Validation Checks ---
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -87,6 +82,37 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
         logger.error(f"Failed to sync commands: {e}")
+
+
+@bot.event
+async def on_message(message):
+    # Ignore messages sent by the bot itself to prevent infinite loops
+    if message.author == bot.user:
+        return
+
+    if isinstance(message.channel, discord.Thread):
+
+        try:
+            if not message.channel.starter_message:
+                return
+                
+            # temp, only bot-commands channel
+            if message.channel.parent_id != 1455997613907382383:
+                return
+
+            if message.channel.starter_message.content == message.channel.name:
+                discord_api = DiscordAPI(message)
+                summarizer = Summarizer(ai_client)
+                messages = await discord_api.get_messages(limit=messages_before_rename+5)
+                if len(messages) == messages_before_rename:
+                    new_title = await summarizer.get_title(messages)
+                    if new_title:
+                        await message.channel.edit(name=new_title)
+                        logging.info(f"Renamed thread '{message.channel.name}' to '{new_title}'")
+        except Exception as e:
+            logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
+
+    await bot.process_commands(message)
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
@@ -201,7 +227,6 @@ def make_part_callback(part: Page):
     return callback
 
 
-# TODO this is not done
 async def get_part_update_view(part: Page) -> View:
     part_name = make_part_title(part)
     prop_schema = await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)

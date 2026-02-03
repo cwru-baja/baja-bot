@@ -27,6 +27,22 @@ class Summarizer:
 
         return await self.ai_client.call_llm(system_instruction, messages)
 
+
+    async def generate_title(self, messages) -> str:
+        system_instruction = (
+            "You are a concise executive assistant creating a title for a thread for a technical Discord conversation. "
+            "Your goal is to provide a high-level overview of the thread in just a few words.\n\n"
+            "Input: A transcript of text and attached images.\n"
+            "Task: Create a short title to summarize the conversation.\n\n"
+            "GUIDELINES:\n"
+            "1. IGNORE NOISE: completely ignore keyboard smashing (e.g., 'asdfjkl'), one-word reactions, and off-topic banter that leads nowhere.\n"
+            "2. BE CLEAR: The title should adequately convey to someone unfamiliar with the conversation what it is about.\n"
+            "3. BE SHORT: Keep the title short, no more than a few words."
+        )
+
+        return await self.ai_client.call_llm(system_instruction, messages)
+
+
     def build_transcript_with_images(self, messages: list) -> list:
         """
         Constructs the user content payload for the LLM, interleaving text and images.
@@ -100,3 +116,16 @@ class Summarizer:
             return f"**Thread Summary:**\n{summary}"
         else:
             return "Failed to generate a summary."
+
+
+    async def get_title(self, messages) -> str:
+        transcript_content = self.build_transcript_with_images(messages)
+
+        title = await self.generate_title(transcript_content)
+
+        if title:
+            if len(title) > 100:
+                title = title[:100] + "..."
+            return title
+        else:
+            return ""
