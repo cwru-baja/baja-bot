@@ -19,7 +19,9 @@ from Summarizer import Summarizer
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title
 
-messages_before_rename = 3
+
+# Bot config values
+messages_before_rename = 10
 
 ai_client: AIAPI = None
 bot: commands.Bot = None
@@ -42,15 +44,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# logger = logging.getLogger()
-#
-# ch = logging.StreamHandler()
-# ch.setStream(sys.stdout)
-# ch.setLevel(logging.DEBUG)
-#
-# ch.setFormatter(LogFormatter())
-#
-# logger.addHandler(ch)
 
 # --- Validation Checks ---
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -99,24 +92,21 @@ async def on_message(message):
 
     if isinstance(message.channel, discord.Thread):
 
-        # print(message.channel.id in threads)
-        # if message.channel.id in threads:
-        #     print(threads[message.channel.id])
-        # Optional: Check for specific content, e.g., a command or keyword
-        # if "hello bot" in message.content.lower():
-            # Send a reply directly to the thread
-        if not message.channel.starter_message:
-            return
+        try:
+            if not message.channel.starter_message:
+                return
 
-        if message.channel.starter_message.content == message.channel.name:
-            print("LETS GO RENAMIN!")
-            discord_api = DiscordAPI(message)
-            summarizer = Summarizer(ai_client)
-            messages = await discord_api.get_messages(limit=messages_before_rename+5)
-            if len(messages) == messages_before_rename:
-                new_title = await summarizer.get_title(messages)
-                if new_title:
-                    await message.channel.edit(name=new_title)
+            if message.channel.starter_message.content == message.channel.name:
+                discord_api = DiscordAPI(message)
+                summarizer = Summarizer(ai_client)
+                messages = await discord_api.get_messages(limit=messages_before_rename+5)
+                if len(messages) == messages_before_rename:
+                    new_title = await summarizer.get_title(messages)
+                    if new_title:
+                        await message.channel.edit(name=new_title)
+                        logging.info(f"Renamed thread '{message.channel.name}' to '{new_title}'")
+        except Exception as e:
+            logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
 
     await bot.process_commands(message)
 
