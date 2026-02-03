@@ -95,6 +95,10 @@ async def on_message(message):
         try:
             if not message.channel.starter_message:
                 return
+                
+            # temp, only bot-commands channel
+            if message.channel.parent_id != 1455997613907382383:
+                return
 
             if message.channel.starter_message.content == message.channel.name:
                 discord_api = DiscordAPI(message)
