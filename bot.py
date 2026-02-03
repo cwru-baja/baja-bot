@@ -19,6 +19,8 @@ from Summarizer import Summarizer
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title
 
+messages_before_rename = 3
+
 ai_client: AIAPI = None
 bot: commands.Bot = None
 notion_client: NotionAPI = None
@@ -87,6 +89,36 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
         logger.error(f"Failed to sync commands: {e}")
+
+
+@bot.event
+async def on_message(message):
+    # Ignore messages sent by the bot itself to prevent infinite loops
+    if message.author == bot.user:
+        return
+
+    if isinstance(message.channel, discord.Thread):
+
+        # print(message.channel.id in threads)
+        # if message.channel.id in threads:
+        #     print(threads[message.channel.id])
+        # Optional: Check for specific content, e.g., a command or keyword
+        # if "hello bot" in message.content.lower():
+            # Send a reply directly to the thread
+        if not message.channel.starter_message:
+            return
+
+        if message.channel.starter_message.content == message.channel.name:
+            print("LETS GO RENAMIN!")
+            discord_api = DiscordAPI(message)
+            summarizer = Summarizer(ai_client)
+            messages = await discord_api.get_messages(limit=messages_before_rename+5)
+            if len(messages) == messages_before_rename:
+                new_title = await summarizer.get_title(messages)
+                if new_title:
+                    await message.channel.edit(name=new_title)
+
+    await bot.process_commands(message)
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
@@ -201,7 +233,6 @@ def make_part_callback(part: Page):
     return callback
 
 
-# TODO this is not done
 async def get_part_update_view(part: Page) -> View:
     part_name = make_part_title(part)
     prop_schema = await notion_client.retrieve_data(PARTS_DATA_SOURCE_ID)
