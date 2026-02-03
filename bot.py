@@ -100,7 +100,7 @@ async def on_message(message):
             if message.channel.parent_id != 1455997613907382383:
                 return
 
-            if message.channel.starter_message.content == message.channel.name:
+            if message.channel.starter_message.clean_content.startswith(message.channel.name):
                 discord_api = DiscordAPI(message)
                 summarizer = Summarizer(ai_client)
                 messages = await discord_api.get_messages(limit=messages_before_rename+5)
