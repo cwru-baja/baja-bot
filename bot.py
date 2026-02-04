@@ -96,19 +96,16 @@ async def on_message(message):
             if not message.channel.starter_message:
                 return
                 
-            # temp, only bot-commands channel
-            if message.channel.parent_id != 1455997613907382383:
-                return
-
             if message.channel.starter_message.clean_content.startswith(message.channel.name):
                 discord_api = DiscordAPI(message)
                 summarizer = Summarizer(ai_client)
                 messages = await discord_api.get_messages(limit=messages_before_rename+5)
                 if len(messages) == messages_before_rename:
+                    old_name = message.channel.name
                     new_title = await summarizer.get_title(messages)
                     if new_title:
                         await message.channel.edit(name=new_title)
-                        logging.info(f"Renamed thread '{message.channel.name}' to '{new_title}'")
+                        logging.info(f"Renamed thread '{old_name}' to '{new_title}'")
         except Exception as e:
             logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
 
