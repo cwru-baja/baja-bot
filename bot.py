@@ -101,6 +101,11 @@ async def on_message(message):
                 summarizer = Summarizer(ai_client)
                 messages = await discord_api.get_messages(limit=messages_before_rename+5)
                 if len(messages) == messages_before_rename:
+                    # If we are here, we are renaming
+
+                    starter_message = message.channel.starter_message
+                    # Add starter message to the list so it has something to work with
+                    messages.insert(0, starter_message)
                     old_name = message.channel.name
                     new_title = await summarizer.get_title(messages)
                     if new_title:
