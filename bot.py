@@ -21,7 +21,7 @@ from utils import parse_duration, make_embed_from_part, make_part_title
 
 
 # Bot config values
-messages_before_rename = 10
+messages_before_rename = 5
 
 ai_client: AIAPI = None
 bot: commands.Bot = None
