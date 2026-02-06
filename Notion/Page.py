@@ -2,12 +2,12 @@ import typing
 from datetime import datetime
 from typing import List, Dict
 
-from Notion.BaseNotion import BaseNotion
-from Notion.Property import Property
+from notion.base_notion import BaseNotion
+from notion.property import Property
 from utils import parse_time_utc
 
 if typing.TYPE_CHECKING:
-    from Notion.NotionAPI import NotionAPI
+    from notion.notion_api import NotionAPI
 
 
 class Page(BaseNotion):

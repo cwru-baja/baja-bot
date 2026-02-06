@@ -2,7 +2,7 @@ import io
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time as dt_time
 
 import aiohttp
 import discord
@@ -10,12 +10,15 @@ from discord import ButtonStyle, File, SelectOption
 from discord.ext import commands
 from discord.ui import View, Button, Select
 from dotenv import load_dotenv
+import pytz
 
-from AIAPI import AIAPI
-from DiscordAPI import DiscordAPI
-from Notion.NotionAPI import NotionAPI
-from Notion.Page import Page
-from Summarizer import Summarizer
+from ai_api import AIAPI
+from discord_api import DiscordAPI
+from notion.notion_api import NotionAPI
+from notion.page import Page
+from summarizer import Summarizer
+from schedule_storage import ScheduleStorage
+import schedule_manager
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title
 
@@ -26,6 +29,7 @@ messages_before_rename = 5
 ai_client: AIAPI = None
 bot: commands.Bot = None
 notion_client: NotionAPI = None
+schedule_storage: ScheduleStorage = None
 
 PARTS_DATA_SOURCE_ID = "22d471ee-8bfe-8135-855c-000bba8ef8cc"
 
@@ -75,6 +79,8 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
+    global schedule_storage
+    
     logger.info(f'Logged in as {bot.user.name}')
     try:
         # Sync slash commands with Discord
@@ -82,6 +88,14 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
         logger.error(f"Failed to sync commands: {e}")
+    
+    # Initialize schedule storage and load scheduled tasks
+    try:
+        schedule_storage = ScheduleStorage()
+        logger.info("Schedule storage initialized")
+        await schedule_manager.load_all_schedules(bot, schedule_storage, ai_client)
+    except Exception as e:
+        logger.error(f"Failed to initialize scheduled summaries: {e}")
 
 
 @bot.event
@@ -417,6 +431,393 @@ async def get_part_search_select_view(filtered_search_results):
         button.callback = callback
         view.add_item(button)
     return view
+
+
+@bot.tree.command(name="schedule-summary", description="Schedule automatic summaries for a channel")
+async def schedule_summary(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    time: str,
+    interval: str,
+    lookback: str,
+    output_channel: discord.TextChannel
+):
+    """
+    Schedule a recurring summary for a channel
+    
+    Args:
+        channel: Channel to summarize
+        time: Time of day (e.g., "14:00" for 2:00 PM EST)
+        interval: How often to repeat (e.g., "24h", "12h", "1d")
+        lookback: How far back to look (e.g., "24h", "1d")
+        output_channel: Where to post summaries
+    """
+    logger.info(f"Schedule-summary: by '{interaction.user.name}' for #{channel.name}")
+    discord_api = DiscordAPI(interaction)
+    
+    await discord_api.think()
+    
+    try:
+        # Parse time string
+        try:
+            time_parts = time.split(':')
+            hour = int(time_parts[0])
+            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+            start_time = dt_time(hour=hour, minute=minute)
+        except (ValueError, IndexError):
+            await discord_api.followup(
+                f"Invalid time format: '{time}'. Please use HH:MM format (e.g., '14:00' for 2:00 PM).",
+                ephemeral=True
+            )
+            return
+        
+        # Parse interval
+        interval_delta = parse_duration(interval)
+        if not interval_delta or interval_delta.total_seconds() < 3600:
+            await discord_api.followup(
+                f"Invalid interval: '{interval}'. Must be at least 1 hour (e.g., '1h', '24h', '1d').",
+                ephemeral=True
+            )
+            return
+        
+        interval_hours = int(interval_delta.total_seconds() / 3600)
+        
+        # Validate lookback
+        lookback_delta = parse_duration(lookback)
+        if not lookback_delta:
+            await discord_api.followup(
+                f"Invalid lookback duration: '{lookback}'. Use format like '24h', '1d', '12h'.",
+                ephemeral=True
+            )
+            return
+        
+        # Get guild timezone
+        timezone_str = schedule_storage.get_guild_timezone(interaction.guild.id)
+        
+        # Save to database
+        schedule_id = schedule_storage.add_schedule(
+            guild_id=interaction.guild.id,
+            channel_ids=[channel.id],
+            target_name=channel.name,
+            schedule_type='channel',
+            output_channel_id=output_channel.id,
+            start_time=start_time,
+            interval_hours=interval_hours,
+            lookback_duration=lookback,
+            created_by_user_id=interaction.user.id
+        )
+        
+        # Create and start the task
+        schedule = schedule_storage.get_schedule(schedule_id)
+        task = schedule_manager.create_schedule_task(schedule, bot, schedule_storage, ai_client)
+        schedule_manager.start_schedule_task(schedule_id, task)
+        
+        await discord_api.followup(
+            f"✅ Schedule created! (ID: {schedule_id})\n"
+            f"• Channel: {channel.mention}\n"
+            f"• Time: {time} {timezone_str}\n"
+            f"• Interval: Every {interval}\n"
+            f"• Lookback: {lookback}\n"
+            f"• Output: {output_channel.mention}\n\n"
+            f"First summary will run at the next scheduled time."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error creating schedule: {e}", exc_info=True)
+        await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+@bot.tree.command(name="schedule-category-summary", description="Schedule automatic summaries for a category")
+async def schedule_category_summary(
+    interaction: discord.Interaction,
+    category_name: str,
+    time: str,
+    interval: str,
+    lookback: str,
+    output_channel: discord.TextChannel
+):
+    """
+    Schedule a recurring summary for all channels in a category
+    
+    Args:
+        category_name: Name of the category
+        time: Time of day (e.g., "14:00" for 2:00 PM EST)
+        interval: How often to repeat (e.g., "24h", "12h", "1d")
+        lookback: How far back to look (e.g., "24h", "1d")
+        output_channel: Where to post summaries
+    """
+    logger.info(f"Schedule-category-summary: by '{interaction.user.name}' for category '{category_name}'")
+    discord_api = DiscordAPI(interaction)
+    
+    await discord_api.think()
+    
+    try:
+        # Find category
+        category = discord.utils.get(interaction.guild.categories, name=category_name)
+        if not category:
+            await discord_api.followup(
+                f"Category '{category_name}' not found. Please check the spelling.",
+                ephemeral=True
+            )
+            return
+        
+        # Get all text channels in category
+        text_channels = category.text_channels
+        if not text_channels:
+            await discord_api.followup(
+                f"Category '{category_name}' has no text channels.",
+                ephemeral=True
+            )
+            return
+        
+        channel_ids = [ch.id for ch in text_channels]
+        
+        # Parse time string
+        try:
+            time_parts = time.split(':')
+            hour = int(time_parts[0])
+            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+            start_time = dt_time(hour=hour, minute=minute)
+        except (ValueError, IndexError):
+            await discord_api.followup(
+                f"Invalid time format: '{time}'. Please use HH:MM format (e.g., '14:00' for 2:00 PM).",
+                ephemeral=True
+            )
+            return
+        
+        # Parse interval
+        interval_delta = parse_duration(interval)
+        if not interval_delta or interval_delta.total_seconds() < 3600:
+            await discord_api.followup(
+                f"Invalid interval: '{interval}'. Must be at least 1 hour (e.g., '1h', '24h', '1d').",
+                ephemeral=True
+            )
+            return
+        
+        interval_hours = int(interval_delta.total_seconds() / 3600)
+        
+        # Validate lookback
+        lookback_delta = parse_duration(lookback)
+        if not lookback_delta:
+            await discord_api.followup(
+                f"Invalid lookback duration: '{lookback}'. Use format like '24h', '1d', '12h'.",
+                ephemeral=True
+            )
+            return
+        
+        # Get guild timezone
+        timezone_str = schedule_storage.get_guild_timezone(interaction.guild.id)
+        
+        # Save to database
+        schedule_id = schedule_storage.add_schedule(
+            guild_id=interaction.guild.id,
+            channel_ids=channel_ids,
+            target_name=category_name,
+            schedule_type='category',
+            output_channel_id=output_channel.id,
+            start_time=start_time,
+            interval_hours=interval_hours,
+            lookback_duration=lookback,
+            created_by_user_id=interaction.user.id
+        )
+        
+        # Create and start the task
+        schedule = schedule_storage.get_schedule(schedule_id)
+        task = schedule_manager.create_schedule_task(schedule, bot, schedule_storage, ai_client)
+        schedule_manager.start_schedule_task(schedule_id, task)
+        
+        channel_list = ", ".join([f"#{ch.name}" for ch in text_channels])
+        
+        await discord_api.followup(
+            f"✅ Category schedule created! (ID: {schedule_id})\n"
+            f"• Category: {category_name} ({len(text_channels)} channels)\n"
+            f"• Channels: {channel_list}\n"
+            f"• Time: {time} {timezone_str}\n"
+            f"• Interval: Every {interval}\n"
+            f"• Lookback: {lookback}\n"
+            f"• Output: {output_channel.mention}\n\n"
+            f"First summary will run at the next scheduled time."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error creating category schedule: {e}", exc_info=True)
+        await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+@bot.tree.command(name="list-schedules", description="List all active scheduled summaries")
+async def list_schedules(interaction: discord.Interaction):
+    """List all active scheduled summaries for this server"""
+    logger.info(f"List-schedules: by '{interaction.user.name}'")
+    discord_api = DiscordAPI(interaction)
+    
+    await discord_api.think()
+    
+    try:
+        schedules = schedule_storage.get_all_active_schedules(interaction.guild.id)
+        
+        if not schedules:
+            await discord_api.followup("No active scheduled summaries found for this server.")
+            return
+        
+        # Get timezone
+        timezone_str = schedule_storage.get_guild_timezone(interaction.guild.id)
+        tz = pytz.timezone(timezone_str)
+        
+        # Build message
+        message = f"**Active Scheduled Summaries** (Timezone: {timezone_str})\n\n"
+        
+        for i, schedule in enumerate(schedules, 1):
+            schedule_id = schedule['id']
+            target_name = schedule['target_name']
+            schedule_type = schedule['schedule_type']
+            interval_hours = schedule['interval_hours']
+            start_time = schedule['start_time']
+            lookback = schedule['lookback_duration']
+            output_channel_id = schedule['output_channel_id']
+            last_run = schedule['last_run']
+            
+            # Format interval
+            if interval_hours == 24:
+                interval_str = "daily"
+            elif interval_hours % 24 == 0:
+                interval_str = f"every {interval_hours // 24} days"
+            else:
+                interval_str = f"every {interval_hours}h"
+            
+            # Format last run
+            if last_run:
+                last_run_dt = last_run.replace(tzinfo=pytz.utc).astimezone(tz)
+                now = datetime.now(tz)
+                time_ago = now - last_run_dt
+                if time_ago.days > 0:
+                    last_run_str = f"{time_ago.days} day(s) ago"
+                elif time_ago.seconds > 3600:
+                    last_run_str = f"{time_ago.seconds // 3600} hour(s) ago"
+                else:
+                    last_run_str = f"{time_ago.seconds // 60} minute(s) ago"
+            else:
+                last_run_str = "Never"
+            
+            # Get output channel name
+            output_channel = interaction.guild.get_channel(output_channel_id)
+            output_str = output_channel.mention if output_channel else f"<deleted channel>"
+            
+            if schedule_type == 'channel':
+                message += f"**{i}. ID: {schedule_id}** | #{target_name}\n"
+            else:
+                channel_count = len(schedule['channel_ids'])
+                message += f"**{i}. ID: {schedule_id}** | Category: {target_name} ({channel_count} channels)\n"
+            
+            message += (
+                f"   Runs: {interval_str.capitalize()} at {start_time.strftime('%H:%M')} EST\n"
+                f"   Lookback: {lookback} | Posts to: {output_str}\n"
+                f"   Last run: {last_run_str}\n\n"
+            )
+        
+        # Discord has 2000 char limit, handle pagination if needed
+        if len(message) > 2000:
+            message = message[:1997] + "..."
+        
+        await discord_api.followup(message)
+        
+    except Exception as e:
+        logger.error(f"Error listing schedules: {e}", exc_info=True)
+        await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+@bot.tree.command(name="remove-schedule", description="Cancel a scheduled summary")
+async def remove_schedule(interaction: discord.Interaction, schedule_id: int):
+    """
+    Remove a scheduled summary
+    
+    Args:
+        schedule_id: The ID of the schedule to remove (from /list-schedules)
+    """
+    logger.info(f"Remove-schedule: by '{interaction.user.name}' for schedule #{schedule_id}")
+    discord_api = DiscordAPI(interaction)
+    
+    await discord_api.think()
+    
+    try:
+        # Check if schedule exists
+        schedule = schedule_storage.get_schedule(schedule_id)
+        
+        if not schedule:
+            await discord_api.followup(
+                f"Schedule #{schedule_id} not found.",
+                ephemeral=True
+            )
+            return
+        
+        # Check if schedule belongs to this guild
+        if schedule['guild_id'] != interaction.guild.id:
+            await discord_api.followup(
+                "You can only remove schedules from this server.",
+                ephemeral=True
+            )
+            return
+        
+        # Remove from database
+        schedule_storage.delete_schedule(schedule_id)
+        
+        # Stop the running task
+        schedule_manager.stop_schedule_task(schedule_id)
+        
+        target_name = schedule['target_name']
+        schedule_type = schedule['schedule_type']
+        
+        await discord_api.followup(
+            f"✅ Removed schedule #{schedule_id}\n"
+            f"({schedule_type}: {target_name})"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error removing schedule: {e}", exc_info=True)
+        await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+@bot.tree.command(name="set-timezone", description="Set the timezone for scheduled summaries")
+async def set_timezone(interaction: discord.Interaction, timezone: str):
+    """
+    Set the timezone for this server's scheduled summaries
+    
+    Args:
+        timezone: Timezone name (e.g., 'America/New_York', 'America/Los_Angeles', 'UTC')
+    """
+    logger.info(f"Set-timezone: by '{interaction.user.name}' to '{timezone}'")
+    discord_api = DiscordAPI(interaction)
+    
+    await discord_api.think()
+    
+    try:
+        # Validate timezone
+        try:
+            pytz.timezone(timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            await discord_api.followup(
+                f"Invalid timezone: '{timezone}'.\n\n"
+                f"Common timezones:\n"
+                f"• America/New_York (EST/EDT)\n"
+                f"• America/Chicago (CST/CDT)\n"
+                f"• America/Denver (MST/MDT)\n"
+                f"• America/Los_Angeles (PST/PDT)\n"
+                f"• UTC\n\n"
+                f"See full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
+                ephemeral=True
+            )
+            return
+        
+        # Save timezone
+        schedule_storage.set_guild_timezone(interaction.guild.id, timezone)
+        
+        await discord_api.followup(
+            f"✅ Timezone set to: {timezone}\n\n"
+            f"This will apply to all new and existing schedules on the next run."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error setting timezone: {e}", exc_info=True)
+        await discord_api.followup(f"An error occurred: {str(e)}")
 
 
 bot.run(discord_token)

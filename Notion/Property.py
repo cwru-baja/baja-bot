@@ -1,9 +1,9 @@
 import typing
 
-from Notion.BaseNotion import BaseNotion
+from notion.base_notion import BaseNotion
 
 if typing.TYPE_CHECKING:
-    from Notion.NotionAPI import NotionAPI
+    from notion.notion_api import NotionAPI
 
 
 class Property(BaseNotion):

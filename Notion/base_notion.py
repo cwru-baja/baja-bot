@@ -1,7 +1,7 @@
 import typing
 
 if typing.TYPE_CHECKING:
-    from Notion.NotionAPI import NotionAPI
+    from notion.notion_api import NotionAPI
 
 
 class BaseNotion:

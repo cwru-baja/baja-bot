@@ -6,7 +6,7 @@ import discord
 import webcolors
 
 if typing.TYPE_CHECKING:
-    from Notion.Page import Page
+    from notion.page import Page
 
 
 def parse_duration(duration_str) -> timedelta:

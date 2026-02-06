@@ -2,8 +2,8 @@
 # import json
 from notion_client import AsyncClient
 
-from Notion.DataSource import DataSource
-from Notion.DataSourceQuery import DataSourceQuery
+from notion.data_source import DataSource
+from notion.data_source_query import DataSourceQuery
 
 
 class NotionAPI(AsyncClient):

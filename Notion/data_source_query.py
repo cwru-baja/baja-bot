@@ -1,11 +1,11 @@
 import typing
 from typing import List
 
-from Notion.BaseNotion import BaseNotion
-from Notion.Page import Page
+from notion.base_notion import BaseNotion
+from notion.page import Page
 
 if typing.TYPE_CHECKING:
-    from Notion.NotionAPI import NotionAPI
+    from notion.notion_api import NotionAPI
 
 class DataSourceQuery(BaseNotion):
     def __init__(self, query_json: dict, client: "NotionAPI"):
