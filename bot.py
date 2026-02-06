@@ -14,8 +14,8 @@ import pytz
 
 from ai_api import AIAPI
 from discord_api import DiscordAPI
-from notion.notion_api import NotionAPI
-from notion.page import Page
+from baja_notion.notion_api import NotionAPI
+from baja_notion.page import Page
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
 import schedule_manager
