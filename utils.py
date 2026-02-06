@@ -107,3 +107,13 @@ def parse_color(color: str) -> str:
 
 def parse_time_utc(time: str, format_str: str="%Y-%m-%dT%H:%M:%S.%fZ") -> datetime:
     return datetime.strptime(time, format_str).replace(tzinfo=timezone.utc)
+
+
+def normalize_category_name(name: str) -> str:
+    """Normalize category names for matching (strip emoji/punctuation, lowercase)."""
+    if not name:
+        return ""
+    # Keep letters, digits, spaces, underscores, and hyphens; drop emoji/punctuation.
+    cleaned = re.sub(r"[^\w\s-]", "", name, flags=re.UNICODE)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip().lower()

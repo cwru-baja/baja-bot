@@ -20,7 +20,7 @@ from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
-from utils import parse_duration, make_embed_from_part, make_part_title
+from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name
 
 
 # Bot config values
@@ -552,20 +552,37 @@ async def schedule_category_summary(
     await discord_api.think()
     
     try:
-        # Find category
+        # Find category (allow emoji/punctuation differences)
         category = discord.utils.get(interaction.guild.categories, name=category_name)
         if not category:
-            await discord_api.followup(
-                f"Category '{category_name}' not found. Please check the spelling.",
-                ephemeral=True
-            )
-            return
+            target_normalized = normalize_category_name(category_name)
+            normalized_matches = [
+                cat for cat in interaction.guild.categories
+                if normalize_category_name(cat.name) == target_normalized
+            ]
+            if len(normalized_matches) == 1:
+                category = normalized_matches[0]
+            elif len(normalized_matches) > 1:
+                match_list = ", ".join([f"'{cat.name}'" for cat in normalized_matches])
+                await discord_api.followup(
+                    f"Category name '{category_name}' is ambiguous. Matches: {match_list}.",
+                    ephemeral=True
+                )
+                return
+            else:
+                await discord_api.followup(
+                    f"Category '{category_name}' not found. Please check the spelling.",
+                    ephemeral=True
+                )
+                return
         
+        resolved_category_name = category.name
+
         # Get all text channels in category
         text_channels = category.text_channels
         if not text_channels:
             await discord_api.followup(
-                f"Category '{category_name}' has no text channels.",
+                f"Category '{resolved_category_name}' has no text channels.",
                 ephemeral=True
             )
             return
@@ -612,7 +629,7 @@ async def schedule_category_summary(
         schedule_id = schedule_storage.add_schedule(
             guild_id=interaction.guild.id,
             channel_ids=channel_ids,
-            target_name=category_name,
+            target_name=resolved_category_name,
             schedule_type='category',
             output_channel_id=output_channel.id,
             start_time=start_time,
@@ -630,7 +647,7 @@ async def schedule_category_summary(
         
         await discord_api.followup(
             f"✅ Category schedule created! (ID: {schedule_id})\n"
-            f"• Category: {category_name} ({len(text_channels)} channels)\n"
+            f"• Category: {resolved_category_name} ({len(text_channels)} channels)\n"
             f"• Channels: {channel_list}\n"
             f"• Time: {time} {timezone_str}\n"
             f"• Interval: Every {interval}\n"
