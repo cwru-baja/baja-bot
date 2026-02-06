@@ -184,7 +184,10 @@ async def summarize_period(interaction: discord.Interaction, duration: str):
     try:
         cutoff_time = datetime.now(timezone.utc) - delta
 
-        messages = await discord_api.get_messages(after=cutoff_time)
+        if isinstance(interaction.channel, discord.Thread):
+            messages = await discord_api.get_messages(after=cutoff_time)
+        else:
+            messages = await discord_api.get_messages_with_threads(after=cutoff_time)
 
         if not messages:
             await discord_api.followup(f"No messages found in the last {duration}.")

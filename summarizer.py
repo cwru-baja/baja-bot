@@ -1,3 +1,5 @@
+import discord
+
 from ai_api import AIAPI
 
 """
@@ -50,6 +52,7 @@ class Summarizer:
         """
         user_content = []
         current_text_block = ""
+        last_thread_id = None
 
         # Track seen image URLs to prevent duplicate "thumbnails" from being sent
         seen_images = set()
@@ -57,6 +60,14 @@ class Summarizer:
         for msg in messages:
             if msg.author.bot:
                 continue
+
+            # Add a thread header when switching threads
+            if isinstance(msg.channel, discord.Thread):
+                if msg.channel.id != last_thread_id:
+                    current_text_block += f"\n[Thread: {msg.channel.name}]\n"
+                    last_thread_id = msg.channel.id
+            else:
+                last_thread_id = None
 
             # Format timestamp and author (Using Nickname/Display Name)
             timestamp = msg.created_at.strftime("%H:%M")
@@ -150,6 +161,7 @@ class Summarizer:
         
         for channel_name, messages in channel_messages_dict.items():
             current_text_block += f"=== CHANNEL: #{channel_name} ===\n"
+            last_thread_id = None
             
             # Build transcript for this channel
             seen_images = set()
@@ -157,6 +169,13 @@ class Summarizer:
             for msg in messages:
                 if msg.author.bot:
                     continue
+
+                if isinstance(msg.channel, discord.Thread):
+                    if msg.channel.id != last_thread_id:
+                        current_text_block += f"\n[Thread: {msg.channel.name}]\n"
+                        last_thread_id = msg.channel.id
+                else:
+                    last_thread_id = None
                 
                 timestamp = msg.created_at.strftime("%H:%M")
                 msg_header = f"[{timestamp}] {msg.author.display_name}: "
@@ -214,10 +233,10 @@ class Summarizer:
             "7. FORMAT: Use bullet points for distinct topics within each section.\n"
             "8. SKIP EMPTY: If a channel has no meaningful content, you can omit it.\n\n"
             "Example format:\n"
-            "## #channel-name\n"
+            "## channel-name\n"
             "- Topic 1 discussed\n"
             "- Decision made about topic 2\n\n"
-            "## #another-channel\n"
+            "## another-channel\n"
             "- Different topic covered"
         )
         

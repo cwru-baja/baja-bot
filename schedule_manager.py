@@ -184,10 +184,8 @@ async def run_channel_summary(guild, channel_id, cutoff_time, summarizer, output
         await output_channel.send(f"⚠️ Could not find channel for scheduled summary: {channel_name}")
         return
     
-    # Fetch messages
-    messages = []
-    async for message in channel.history(limit=500, after=cutoff_time, oldest_first=True):
-        messages.append(message)
+    # Fetch messages from the channel and its threads
+    messages = await fetch_messages_with_threads(channel, cutoff_time)
     
     if not messages:
         logger.info(f"No messages in {channel_name} since {cutoff_time}")
@@ -213,9 +211,7 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
             logger.warning(f"Channel {channel_id} not found in category")
             continue
         
-        messages = []
-        async for message in channel.history(limit=500, after=cutoff_time, oldest_first=True):
-            messages.append(message)
+        messages = await fetch_messages_with_threads(channel, cutoff_time)
         
         if messages:
             channel_messages[channel.name] = messages
@@ -231,6 +227,52 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
     await output_channel.send(
         f"**Scheduled Summary: Category '{category_name}'** (Last {lookback_duration})\n\n{summary}"
     )
+
+
+async def fetch_messages_with_threads(channel, cutoff_time, limit=500):
+    """Fetch messages for a text channel and all threads within the timeframe."""
+    messages = []
+
+    # Channel history
+    async for message in channel.history(limit=limit, after=cutoff_time, oldest_first=True):
+        messages.append(message)
+
+    # Collect active threads
+    thread_ids = set()
+    threads = []
+    for thread in getattr(channel, "threads", []):
+        if thread.id not in thread_ids:
+            thread_ids.add(thread.id)
+            threads.append(thread)
+
+    # Collect archived threads (public and private if permitted)
+    try:
+        async for thread in channel.archived_threads(limit=None):
+            if thread.id not in thread_ids:
+                thread_ids.add(thread.id)
+                threads.append(thread)
+    except Exception as e:
+        logger.warning(f"Failed to fetch archived threads for #{channel.name}: {e}")
+
+    try:
+        async for thread in channel.archived_threads(limit=None, private=True):
+            if thread.id not in thread_ids:
+                thread_ids.add(thread.id)
+                threads.append(thread)
+    except Exception as e:
+        logger.warning(f"Failed to fetch private archived threads for #{channel.name}: {e}")
+
+    # Thread histories
+    for thread in threads:
+        try:
+            async for message in thread.history(limit=limit, after=cutoff_time, oldest_first=True):
+                messages.append(message)
+        except Exception as e:
+            logger.warning(f"Failed to fetch thread history for '{thread.name}': {e}")
+
+    # Sort for consistent ordering
+    messages.sort(key=lambda msg: msg.created_at)
+    return messages
 
 
 def start_schedule_task(schedule_id: int, task):
