@@ -160,7 +160,7 @@ class Summarizer:
         current_text_block = "MULTI-CHANNEL CONVERSATION:\n\n"
         
         for channel_name, messages in channel_messages_dict.items():
-            current_text_block += f"=== CHANNEL: #{channel_name} ===\n"
+            current_text_block += f"=== CHANNEL: {channel_name} ===\n"
             last_thread_id = None
             
             # Build transcript for this channel
@@ -243,8 +243,8 @@ class Summarizer:
         summary = await self.ai_client.call_llm(system_instruction, user_content)
         
         if summary:
-            if len(summary) > 2000:
-                summary = summary[:1997] + "..."
+            # Normalize any accidental "## #" headings to "## ".
+            summary = summary.replace("## #", "## ")
             return summary
         else:
             return "Failed to generate a summary."
