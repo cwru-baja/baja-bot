@@ -194,10 +194,10 @@ async def run_channel_summary(guild, channel_id, cutoff_time, summarizer, output
     # Generate summary
     summary = await summarizer.get_summary(messages)
     
-    # Post to output channel
-    await output_channel.send(
-        f"**Scheduled Summary: {channel.mention}** (Last {lookback_duration})\n\n{summary}"
-    )
+    # Post to output channel (ensure message length limits)
+    header = f"**Scheduled Summary: {channel.mention}** (Last {lookback_duration})"
+    for message in build_summary_messages(header, summary):
+        await output_channel.send(message)
 
 
 async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, output_channel, category_name, lookback_duration):
@@ -223,10 +223,10 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
     # Generate sectioned summary
     summary = await summarizer.get_sectioned_summary(channel_messages)
     
-    # Post to output channel
-    await output_channel.send(
-        f"**Scheduled Summary: Category '{category_name}'** (Last {lookback_duration})\n\n{summary}"
-    )
+    # Post to output channel (ensure message length limits)
+    header = f"**Scheduled Summary: Category '{category_name}'** (Last {lookback_duration})"
+    for message in build_summary_messages(header, summary):
+        await output_channel.send(message)
 
 
 async def fetch_messages_with_threads(channel, cutoff_time, limit=500):
@@ -273,6 +273,43 @@ async def fetch_messages_with_threads(channel, cutoff_time, limit=500):
     # Sort for consistent ordering
     messages.sort(key=lambda msg: msg.created_at)
     return messages
+
+
+def build_summary_messages(header: str, summary: str, max_len: int = 2000):
+    """Build one or more messages that stay within Discord's length limit."""
+    header = header.strip()
+    summary = summary.strip()
+    first_prefix = f"{header}\n\n"
+    first_max = max_len - len(first_prefix)
+    if first_max <= 0:
+        return [header[:max_len]]
+
+    first_chunk, remaining = take_text_chunk(summary, first_max)
+    messages = [first_prefix + first_chunk]
+
+    cont_prefix = "Summary (continued):\n\n"
+    cont_max = max_len - len(cont_prefix)
+    while remaining:
+        chunk, remaining = take_text_chunk(remaining, cont_max)
+        messages.append(cont_prefix + chunk)
+
+    return messages
+
+
+def take_text_chunk(text: str, max_len: int):
+    """Take a chunk up to max_len, prefer paragraph or line breaks."""
+    if len(text) <= max_len:
+        return text, ""
+
+    split_at = text.rfind("\n\n", 0, max_len)
+    if split_at == -1:
+        split_at = text.rfind("\n", 0, max_len)
+    if split_at == -1:
+        split_at = max_len
+
+    chunk = text[:split_at].rstrip()
+    remaining = text[split_at:].lstrip()
+    return chunk, remaining
 
 
 def start_schedule_task(schedule_id: int, task):
