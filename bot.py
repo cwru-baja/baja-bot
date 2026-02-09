@@ -18,6 +18,7 @@ from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
+from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name
@@ -30,6 +31,7 @@ ai_client: AIAPI = None
 bot: commands.Bot = None
 notion_client: NotionAPI = None
 schedule_storage: ScheduleStorage = None
+subscription_storage: SubscriptionStorage = None
 
 PARTS_DATA_SOURCE_ID = "22d471ee-8bfe-8135-855c-000bba8ef8cc"
 
@@ -79,7 +81,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    global schedule_storage
+    global schedule_storage, subscription_storage
     
     logger.info(f'Logged in as {bot.user.name}')
     try:
@@ -96,6 +98,13 @@ async def on_ready():
         await schedule_manager.load_all_schedules(bot, schedule_storage, ai_client)
     except Exception as e:
         logger.error(f"Failed to initialize scheduled summaries: {e}")
+
+    # Initialize subscription storage
+    try:
+        subscription_storage = SubscriptionStorage()
+        logger.info("Subscription storage initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize subscription storage: {e}")
 
 
 @bot.event
@@ -129,6 +138,65 @@ async def on_message(message):
             logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
 
     await bot.process_commands(message)
+
+
+@bot.event
+async def on_thread_create(thread: discord.Thread):
+    """
+    Event handler for when a new thread is created.
+    Adds subscribed users to the thread.
+    """
+    # logger.info(f"Thread created: {thread.name} in #{thread.parent.name}")
+    
+    if not subscription_storage:
+        return
+
+    try:
+        guild = thread.guild
+        channel = thread.parent
+        
+        # Ensure we are in a text channel context where subscriptions apply
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        subscribers = set()
+        
+        # 1. Get channel subscribers
+        channel_subs = subscription_storage.get_subscribers(guild.id, channel.id, 'channel')
+        subscribers.update(channel_subs)
+        
+        # 2. Get category subscribers
+        if channel.category:
+            category_subs = subscription_storage.get_subscribers(guild.id, channel.category.id, 'category')
+            subscribers.update(category_subs)
+            
+        if not subscribers:
+            return
+            
+        logger.info(f"Found {len(subscribers)} subscribers for thread '{thread.name}' in #{channel.name}")
+        
+        for user_id in subscribers:
+            try:
+                # Try to get member from cache first
+                member = guild.get_member(user_id)
+                if not member:
+                    # Fetch from API if not in cache
+                    try:
+                        member = await guild.fetch_member(user_id)
+                    except discord.NotFound:
+                        logger.warning(f"User {user_id} no longer in guild, could not add to thread")
+                        continue
+                
+                if member:
+                    await thread.add_user(member)
+                    # logger.debug(f"Added user {member.name} to thread '{thread.name}'")
+            except discord.Forbidden:
+                logger.warning(f"Missing permissions to add user {user_id} to thread '{thread.name}'")
+            except Exception as e:
+                logger.error(f"Failed to add user {user_id} to thread: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error in on_thread_create: {e}")
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
@@ -838,6 +906,153 @@ async def set_timezone(interaction: discord.Interaction, timezone: str):
     except Exception as e:
         logger.error(f"Error setting timezone: {e}", exc_info=True)
         await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+# --- Subscription Commands ---
+
+@bot.tree.command(name="subscribe-channel", description="Subscribe to be added to new threads in a channel")
+async def subscribe_channel(interaction: discord.Interaction, channel: discord.TextChannel = None):
+    """
+    Subscribe to a channel (current channel if not specified)
+    """
+    discord_api = DiscordAPI(interaction)
+    target_channel = channel or interaction.channel
+    
+    if not isinstance(target_channel, discord.TextChannel):
+         await discord_api.send_message("You can only subscribe to text channels.", ephemeral=True)
+         return
+
+    success = subscription_storage.add_subscription(
+        interaction.guild.id, interaction.user.id, target_channel.id, 'channel'
+    )
+    
+    if success:
+        await discord_api.send_message(f"✅ You are now subscribed to {target_channel.mention}. You will be added to new threads created here.", ephemeral=True)
+    else:
+        await discord_api.send_message(f"You are already subscribed to {target_channel.mention}.", ephemeral=True)
+
+
+@bot.tree.command(name="subscribe-category", description="Subscribe to be added to new threads in a category")
+async def subscribe_category(interaction: discord.Interaction, category_name: str):
+    """
+    Subscribe to a category
+    """
+    discord_api = DiscordAPI(interaction)
+    
+    # Find category (allow emoji/punctuation differences)
+    category = discord.utils.get(interaction.guild.categories, name=category_name)
+    if not category:
+        target_normalized = normalize_category_name(category_name)
+        normalized_matches = [
+            cat for cat in interaction.guild.categories
+            if normalize_category_name(cat.name) == target_normalized
+        ]
+        if len(normalized_matches) == 1:
+            category = normalized_matches[0]
+        elif len(normalized_matches) > 1:
+            match_list = ", ".join([f"'{cat.name}'" for cat in normalized_matches])
+            await discord_api.send_message(
+                f"Category name '{category_name}' is ambiguous. Matches: {match_list}.",
+                ephemeral=True
+            )
+            return
+        else:
+            await discord_api.send_message(
+                f"Category '{category_name}' not found. Please check the spelling.",
+                ephemeral=True
+            )
+            return
+    
+    success = subscription_storage.add_subscription(
+        interaction.guild.id, interaction.user.id, category.id, 'category'
+    )
+    
+    if success:
+         await discord_api.send_message(f"✅ You are now subscribed to category **{category.name}**. You will be added to new threads in any channel in this category.", ephemeral=True)
+    else:
+         await discord_api.send_message(f"You are already subscribed to category **{category.name}**.", ephemeral=True)
+
+
+@bot.tree.command(name="unsubscribe-channel", description="Unsubscribe from a channel")
+async def unsubscribe_channel(interaction: discord.Interaction, channel: discord.TextChannel = None):
+    """
+    Unsubscribe from a channel
+    """
+    discord_api = DiscordAPI(interaction)
+    target_channel = channel or interaction.channel
+    
+    if not isinstance(target_channel, discord.TextChannel):
+         await discord_api.send_message("Invalid channel.", ephemeral=True)
+         return
+
+    success = subscription_storage.remove_subscription(
+        interaction.guild.id, interaction.user.id, target_channel.id, 'channel'
+    )
+    
+    if success:
+        await discord_api.send_message(f"✅ Unsubscribed from {target_channel.mention}.", ephemeral=True)
+    else:
+        await discord_api.send_message(f"You were not subscribed to {target_channel.mention}.", ephemeral=True)
+
+
+@bot.tree.command(name="unsubscribe-category", description="Unsubscribe from a category")
+async def unsubscribe_category(interaction: discord.Interaction, category_name: str):
+    """
+    Unsubscribe from a category
+    """
+    discord_api = DiscordAPI(interaction)
+    
+    # Find category
+    category = discord.utils.get(interaction.guild.categories, name=category_name)
+    if not category:
+        target_normalized = normalize_category_name(category_name)
+        normalized_matches = [
+            cat for cat in interaction.guild.categories
+            if normalize_category_name(cat.name) == target_normalized
+        ]
+        if len(normalized_matches) == 1:
+            category = normalized_matches[0]
+        else:
+            await discord_api.send_message(
+                f"Category '{category_name}' not found or ambiguous.",
+                ephemeral=True
+            )
+            return
+
+    success = subscription_storage.remove_subscription(
+        interaction.guild.id, interaction.user.id, category.id, 'category'
+    )
+    
+    if success:
+         await discord_api.send_message(f"✅ Unsubscribed from category **{category.name}**.", ephemeral=True)
+    else:
+         await discord_api.send_message(f"You were not subscribed to category **{category.name}**.", ephemeral=True)
+
+
+@bot.tree.command(name="list-subscriptions", description="List your active thread subscriptions")
+async def list_subscriptions(interaction: discord.Interaction):
+    """
+    List your active thread subscriptions
+    """
+    discord_api = DiscordAPI(interaction)
+    subs = subscription_storage.get_user_subscriptions(interaction.guild.id, interaction.user.id)
+    
+    if not subs:
+        await discord_api.send_message("You have no active subscriptions.", ephemeral=True)
+        return
+        
+    msg = "**Your Thread Subscriptions:**\n"
+    for sub in subs:
+        if sub['target_type'] == 'channel':
+            channel = interaction.guild.get_channel(sub['target_id'])
+            name = channel.mention if channel else "<deleted channel>"
+            msg += f"• Channel: {name}\n"
+        else:
+            category = discord.utils.get(interaction.guild.categories, id=sub['target_id'])
+            name = category.name if category else "<deleted category>"
+            msg += f"• Category: {name}\n"
+            
+    await discord_api.send_message(msg, ephemeral=True)
 
 
 bot.run(discord_token)

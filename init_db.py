@@ -65,6 +65,21 @@ def init_database():
             );
         """)
         
+        print("Creating thread_subscriptions table...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS thread_subscriptions (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                target_id BIGINT NOT NULL,
+                target_type VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                
+                CONSTRAINT valid_target_type CHECK (target_type IN ('channel', 'category')),
+                CONSTRAINT unique_subscription UNIQUE (guild_id, user_id, target_id, target_type)
+            );
+        """)
+
         print("Creating indexes...")
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_active_schedules 
@@ -76,10 +91,21 @@ def init_database():
             ON scheduled_summaries(id, guild_id);
         """)
         
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subscription_lookup 
+            ON thread_subscriptions(guild_id, target_id);
+        """)
+        
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_subscriptions 
+            ON thread_subscriptions(guild_id, user_id);
+        """)
+        
         conn.commit()
         print("✅ Database initialized successfully!")
         print("   - scheduled_summaries table created")
         print("   - guild_settings table created")
+        print("   - thread_subscriptions table created")
         print("   - Indexes created")
         
     except Exception as e:
