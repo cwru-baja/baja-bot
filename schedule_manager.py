@@ -300,7 +300,7 @@ def build_summary_messages(header: str, summary: str, max_len: int = 2000):
     first_chunk, remaining = take_text_chunk(summary, first_max)
     messages = [first_prefix + first_chunk]
 
-    cont_prefix = "Summary (continued):\n\n"
+    cont_prefix = ""
     cont_max = max_len - len(cont_prefix)
     while remaining:
         chunk, remaining = take_text_chunk(remaining, cont_max)
