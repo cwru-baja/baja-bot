@@ -122,7 +122,9 @@ async def on_message(message):
             if message.channel.starter_message.clean_content.startswith(message.channel.name):
                 discord_api = DiscordAPI(message)
                 summarizer = Summarizer(ai_client)
-                messages = await discord_api.get_messages(limit=messages_before_rename+5)
+                messages = await discord_api.get_messages(limit=messages_before_rename+15)
+                # Filter out threads that have no content (like subscribed messages)
+                messages = [messsage for message in message if message.content]
                 if len(messages) == messages_before_rename:
                     # If we are here, we are renaming
 
