@@ -124,7 +124,7 @@ async def on_message(message):
                 summarizer = Summarizer(ai_client)
                 messages = await discord_api.get_messages(limit=messages_before_rename+15)
                 # Filter out threads that have no content (like subscribed messages)
-                messages = [messsage for message in messages if message.content]
+                messages = [message for message in messages if message.content]
                 if len(messages) == messages_before_rename:
                     # If we are here, we are renaming
 
