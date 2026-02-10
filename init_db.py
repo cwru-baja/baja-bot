@@ -46,6 +46,7 @@ def init_database():
                 start_time TIME NOT NULL,
                 interval_hours INTEGER NOT NULL,
                 lookback_duration VARCHAR(20) NOT NULL,
+                days_of_week INTEGER[],
                 created_at TIMESTAMP DEFAULT NOW(),
                 created_by_user_id BIGINT,
                 active BOOLEAN DEFAULT TRUE,

@@ -21,7 +21,7 @@ from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
-from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name
+from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week
 
 
 # Bot config values
@@ -513,7 +513,8 @@ async def schedule_summary(
     time: str,
     interval: str,
     lookback: str,
-    output_channel: discord.TextChannel
+    output_channel: discord.TextChannel,
+    days: str = None
 ):
     """
     Schedule a recurring summary for a channel
@@ -524,6 +525,7 @@ async def schedule_summary(
         interval: How often to repeat (e.g., "24h", "12h", "1d")
         lookback: How far back to look (e.g., "24h", "1d")
         output_channel: Where to post summaries
+        days: Optional days to run (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday"). Leave empty for every day.
     """
     logger.info(f"Schedule-summary: by '{interaction.user.name}' for #{channel.name}")
     discord_api = DiscordAPI(interaction)
@@ -564,6 +566,19 @@ async def schedule_summary(
             )
             return
         
+        # Parse days of week if provided
+        days_of_week = None
+        if days:
+            days_of_week = parse_days_of_week(days)
+            if days_of_week is None:
+                await discord_api.followup(
+                    f"Invalid days format: '{days}'.\n"
+                    f"Use comma-separated day names or abbreviations.\n"
+                    f"Examples: 'Mon,Wed,Fri' or 'Monday,Wednesday,Friday'",
+                    ephemeral=True
+                )
+                return
+        
         # Get guild timezone
         timezone_str = schedule_storage.get_guild_timezone(interaction.guild.id)
         
@@ -577,7 +592,8 @@ async def schedule_summary(
             start_time=start_time,
             interval_hours=interval_hours,
             lookback_duration=lookback,
-            created_by_user_id=interaction.user.id
+            created_by_user_id=interaction.user.id,
+            days_of_week=days_of_week
         )
         
         # Create and start the task
@@ -585,10 +601,18 @@ async def schedule_summary(
         task = schedule_manager.create_schedule_task(schedule, bot, schedule_storage, ai_client)
         schedule_manager.start_schedule_task(schedule_id, task)
         
+        # Format days for display
+        days_str = ""
+        if days_of_week:
+            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            selected_days = [day_names[d] for d in sorted(days_of_week)]
+            days_str = f"• Days: {', '.join(selected_days)}\n"
+        
         await discord_api.followup(
             f"✅ Schedule created! (ID: {schedule_id})\n"
             f"• Channel: {channel.mention}\n"
             f"• Time: {time} {timezone_str}\n"
+            f"{days_str}"
             f"• Interval: Every {interval}\n"
             f"• Lookback: {lookback}\n"
             f"• Output: {output_channel.mention}\n\n"
@@ -607,7 +631,8 @@ async def schedule_category_summary(
     time: str,
     interval: str,
     lookback: str,
-    output_channel: discord.TextChannel
+    output_channel: discord.TextChannel,
+    days: str = None
 ):
     """
     Schedule a recurring summary for all channels in a category
@@ -618,6 +643,7 @@ async def schedule_category_summary(
         interval: How often to repeat (e.g., "24h", "12h", "1d")
         lookback: How far back to look (e.g., "24h", "1d")
         output_channel: Where to post summaries
+        days: Optional days to run (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday"). Leave empty for every day.
     """
     logger.info(f"Schedule-category-summary: by '{interaction.user.name}' for category '{category_name}'")
     discord_api = DiscordAPI(interaction)
@@ -695,6 +721,19 @@ async def schedule_category_summary(
             )
             return
         
+        # Parse days of week if provided
+        days_of_week = None
+        if days:
+            days_of_week = parse_days_of_week(days)
+            if days_of_week is None:
+                await discord_api.followup(
+                    f"Invalid days format: '{days}'.\n"
+                    f"Use comma-separated day names or abbreviations.\n"
+                    f"Examples: 'Mon,Wed,Fri' or 'Monday,Wednesday,Friday'",
+                    ephemeral=True
+                )
+                return
+        
         # Get guild timezone
         timezone_str = schedule_storage.get_guild_timezone(interaction.guild.id)
         
@@ -708,7 +747,8 @@ async def schedule_category_summary(
             start_time=start_time,
             interval_hours=interval_hours,
             lookback_duration=lookback,
-            created_by_user_id=interaction.user.id
+            created_by_user_id=interaction.user.id,
+            days_of_week=days_of_week
         )
         
         # Create and start the task
@@ -718,11 +758,19 @@ async def schedule_category_summary(
         
         channel_list = ", ".join([f"#{ch.name}" for ch in text_channels])
         
+        # Format days for display
+        days_str = ""
+        if days_of_week:
+            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            selected_days = [day_names[d] for d in sorted(days_of_week)]
+            days_str = f"• Days: {', '.join(selected_days)}\n"
+        
         await discord_api.followup(
             f"✅ Category schedule created! (ID: {schedule_id})\n"
             f"• Category: {resolved_category_name} ({len(text_channels)} channels)\n"
             f"• Channels: {channel_list}\n"
             f"• Time: {time} {timezone_str}\n"
+            f"{days_str}"
             f"• Interval: Every {interval}\n"
             f"• Lookback: {lookback}\n"
             f"• Output: {output_channel.mention}\n\n"
@@ -798,8 +846,16 @@ async def list_schedules(interaction: discord.Interaction):
                 channel_count = len(schedule['channel_ids'])
                 message += f"**{i}. ID: {schedule_id}** | Category: {target_name} ({channel_count} channels)\n"
             
+            # Format days of week if specified
+            days_of_week = schedule.get('days_of_week')
+            days_str = ""
+            if days_of_week:
+                day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                selected_days = [day_names[d] for d in sorted(days_of_week)]
+                days_str = f" on {', '.join(selected_days)}"
+            
             message += (
-                f"   Runs: {interval_str.capitalize()} at {start_time.strftime('%H:%M')} EST\n"
+                f"   Runs: {interval_str.capitalize()} at {start_time.strftime('%H:%M')} EST{days_str}\n"
                 f"   Lookback: {lookback} | Posts to: {output_str}\n"
                 f"   Last run: {last_run_str}\n\n"
             )

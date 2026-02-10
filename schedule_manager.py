@@ -129,6 +129,19 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
     lookback_duration = schedule['lookback_duration']
     schedule_type = schedule['schedule_type']
     target_name = schedule['target_name']
+    days_of_week = schedule.get('days_of_week')
+    
+    # Check if today is in the allowed days
+    if days_of_week:
+        # Get guild timezone
+        timezone_str = storage.get_guild_timezone(guild_id)
+        tz = pytz.timezone(timezone_str)
+        now = datetime.now(tz)
+        current_day = now.weekday()  # 0=Monday, 6=Sunday
+        
+        if current_day not in days_of_week:
+            logger.info(f"Skipping schedule #{schedule_id}: Today ({current_day}) is not in allowed days {days_of_week}")
+            return
     
     logger.info(f"Running schedule #{schedule_id}: {target_name}")
     

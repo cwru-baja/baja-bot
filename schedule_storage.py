@@ -62,7 +62,7 @@ class ScheduleStorage:
                      target_name: str, schedule_type: str,
                      output_channel_id: int, start_time: dt_time, 
                      interval_hours: int, lookback_duration: str, 
-                     created_by_user_id: int) -> int:
+                     created_by_user_id: int, days_of_week: Optional[List[int]] = None) -> int:
         """
         Add a new schedule and return its ID
         
@@ -76,6 +76,7 @@ class ScheduleStorage:
             interval_hours: How often to repeat (in hours)
             lookback_duration: How far back to look for messages (e.g., '24h')
             created_by_user_id: Discord user ID who created the schedule
+            days_of_week: Optional list of day numbers (0=Monday, 6=Sunday). None means every day.
             
         Returns:
             The ID of the newly created schedule
@@ -86,12 +87,12 @@ class ScheduleStorage:
                     INSERT INTO scheduled_summaries 
                     (guild_id, channel_ids, target_name, schedule_type, 
                      output_channel_id, start_time, interval_hours, 
-                     lookback_duration, created_by_user_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     lookback_duration, created_by_user_id, days_of_week)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (guild_id, channel_ids, target_name, schedule_type, 
                       output_channel_id, start_time, interval_hours, 
-                      lookback_duration, created_by_user_id))
+                      lookback_duration, created_by_user_id, days_of_week))
                 schedule_id = cur.fetchone()[0]
                 conn.commit()
                 return schedule_id

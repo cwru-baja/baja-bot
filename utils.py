@@ -117,3 +117,41 @@ def normalize_category_name(name: str) -> str:
     cleaned = re.sub(r"[^\w\s-]", "", name, flags=re.UNICODE)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip().lower()
+
+
+def parse_days_of_week(days_str: str) -> typing.Optional[typing.List[int]]:
+    """
+    Parse a comma-separated list of day names/abbreviations into day numbers.
+    
+    Args:
+        days_str: Comma-separated day names (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday")
+        
+    Returns:
+        List of day numbers (0=Monday, 6=Sunday) or None if invalid
+    """
+    if not days_str:
+        return None
+    
+    # Mapping of day names/abbreviations to numbers
+    day_map = {
+        'monday': 0, 'mon': 0, 'mo': 0,
+        'tuesday': 1, 'tue': 1, 'tu': 1,
+        'wednesday': 2, 'wed': 2, 'we': 2,
+        'thursday': 3, 'thu': 3, 'th': 3,
+        'friday': 4, 'fri': 4, 'fr': 4,
+        'saturday': 5, 'sat': 5, 'sa': 5,
+        'sunday': 6, 'sun': 6, 'su': 6,
+    }
+    
+    days = []
+    parts = [p.strip().lower() for p in days_str.split(',')]
+    
+    for part in parts:
+        if part in day_map:
+            day_num = day_map[part]
+            if day_num not in days:  # Avoid duplicates
+                days.append(day_num)
+        else:
+            return None  # Invalid day name
+    
+    return sorted(days) if days else None
