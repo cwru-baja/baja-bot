@@ -7,7 +7,7 @@ from discord.ext import tasks
 
 from summarizer import Summarizer
 from discord_api import DiscordAPI
-from utils import parse_duration
+from utils import parse_duration, is_channel_excluded_from_summary
 
 """
 Schedule manager for handling scheduled summary tasks.
@@ -217,13 +217,16 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
     """Run summary for a category (multiple channels with sections)"""
     channel_messages = {}
     
-    # Fetch messages from each channel
+    # Fetch messages from each channel (exclude non-serious channels like shitposting, memes)
     for channel_id in channel_ids:
         channel = guild.get_channel(channel_id)
         if not channel:
             logger.warning(f"Channel {channel_id} not found in category")
             continue
-        
+        if is_channel_excluded_from_summary(channel.name):
+            logger.info(f"Excluding channel #{channel.name} from category summary (non-serious)")
+            continue
+
         messages = await fetch_messages_with_threads(channel, cutoff_time)
         
         if messages:

@@ -109,6 +109,29 @@ def parse_time_utc(time: str, format_str: str="%Y-%m-%dT%H:%M:%S.%fZ") -> dateti
     return datetime.strptime(time, format_str).replace(tzinfo=timezone.utc)
 
 
+# Channel name substrings (case-insensitive) that indicate non-serious channels to exclude from category summaries
+SUMMARY_EXCLUDED_CHANNEL_PATTERNS = (
+    "shitpost",
+    "shit-post",
+    "shitposting",
+    "meme",
+    "memes",
+    "spam",
+    "off-topic",
+    "vent",
+    "rant",
+    "random",
+)
+
+
+def is_channel_excluded_from_summary(channel_name: str) -> bool:
+    """Return True if the channel should be excluded from category summaries (e.g., shitposting, memes)."""
+    if not channel_name:
+        return False
+    name_lower = channel_name.lower()
+    return any(pattern in name_lower for pattern in SUMMARY_EXCLUDED_CHANNEL_PATTERNS)
+
+
 def normalize_category_name(name: str) -> str:
     """Normalize category names for matching (strip emoji/punctuation, lowercase)."""
     if not name:

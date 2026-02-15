@@ -21,7 +21,7 @@ from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
-from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week
+from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week, is_channel_excluded_from_summary
 
 
 # Bot config values
@@ -677,16 +677,19 @@ async def schedule_category_summary(
         
         resolved_category_name = category.name
 
-        # Get all text channels in category
+        # Get all text channels in category (exclude non-serious channels like shitposting, memes)
         text_channels = category.text_channels
-        if not text_channels:
+        excluded = [ch for ch in text_channels if is_channel_excluded_from_summary(ch.name)]
+        channels_to_summarize = [ch for ch in text_channels if not is_channel_excluded_from_summary(ch.name)]
+
+        if not channels_to_summarize:
             await discord_api.followup(
-                f"Category '{resolved_category_name}' has no text channels.",
+                f"Category '{resolved_category_name}' has no text channels to summarize (all excluded as non-serious).",
                 ephemeral=True
             )
             return
-        
-        channel_ids = [ch.id for ch in text_channels]
+
+        channel_ids = [ch.id for ch in channels_to_summarize]
         
         # Parse time string
         try:
@@ -756,19 +759,23 @@ async def schedule_category_summary(
         task = schedule_manager.create_schedule_task(schedule, bot, schedule_storage, ai_client)
         schedule_manager.start_schedule_task(schedule_id, task)
         
-        channel_list = ", ".join([f"#{ch.name}" for ch in text_channels])
-        
+        channel_list = ", ".join([f"#{ch.name}" for ch in channels_to_summarize])
+        excluded_note = ""
+        if excluded:
+            excluded_note = f"\n• Excluded (non-serious): {', '.join(f'#{ch.name}' for ch in excluded)}\n"
+
         # Format days for display
         days_str = ""
         if days_of_week:
             day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
             selected_days = [day_names[d] for d in sorted(days_of_week)]
             days_str = f"• Days: {', '.join(selected_days)}\n"
-        
+
         await discord_api.followup(
             f"✅ Category schedule created! (ID: {schedule_id})\n"
-            f"• Category: {resolved_category_name} ({len(text_channels)} channels)\n"
+            f"• Category: {resolved_category_name} ({len(channels_to_summarize)} channels)\n"
             f"• Channels: {channel_list}\n"
+            f"{excluded_note}"
             f"• Time: {time} {timezone_str}\n"
             f"{days_str}"
             f"• Interval: Every {interval}\n"
