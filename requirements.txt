@@ -8,3 +8,4 @@ requests
 psycopg2-binary~=2.9.9
 pytz~=2024.1
 logtail-python~=0.3.2
+loguru~=0.7.0

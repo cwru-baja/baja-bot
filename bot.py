@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime, timezone, time as dt_time
 from logtail import LogtailHandler
+from loguru import logger
 
 import aiohttp
 import discord
@@ -44,19 +45,25 @@ discord_token = os.getenv('DISCORD_TOKEN')
 openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
 notion_token = os.getenv('NOTION_TOKEN')
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    stream=sys.stdout
-)
-logger = logging.getLogger(__name__)
+# --- Loguru setup ---
+logger.remove()
+logger.add(sys.stdout, level="DEBUG", format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}")
 
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
     logtail_handler = LogtailHandler(source_token=logtail_token)
-    logtail_handler.setLevel(logging.DEBUG)
-    logging.getLogger().addHandler(logtail_handler)
+    logger.add(logtail_handler, level="DEBUG")
+
+# Intercept stdlib logging (discord.py, etc.) and route through loguru
+class InterceptHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
+
+logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 
 # --- Validation Checks ---

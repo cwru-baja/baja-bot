@@ -1,5 +1,4 @@
-import logging
-import traceback
+from loguru import logger
 from datetime import datetime, timedelta, time as dt_time
 from typing import Dict
 import pytz
@@ -15,7 +14,6 @@ Schedule manager for handling scheduled summary tasks.
 Creates and manages discord.ext.tasks loops for each schedule.
 """
 
-logger = logging.getLogger(__name__)
 
 # Global dictionary to track active schedule tasks
 active_schedule_tasks = {}  # {schedule_id: Task}
@@ -187,8 +185,7 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
         logger.info(f"Completed schedule #{schedule_id}")
         
     except Exception as e:
-        tb = traceback.format_exc().replace("\n", " | ")
-        logger.error(f"Error executing schedule #{schedule_id}: {e} | {tb}")
+        logger.opt(exception=True).error(f"Error executing schedule #{schedule_id}: {e}")
 
 
 async def run_channel_summary(guild, channel_id, cutoff_time, summarizer, output_channel, channel_name, lookback_duration):
