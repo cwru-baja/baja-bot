@@ -648,7 +648,8 @@ async def schedule_category_summary(
     interval: str,
     lookback: str,
     output_channel: discord.TextChannel,
-    days: str = None
+    days: str = None,
+    skip_private_channels: bool = True
 ):
     """
     Schedule a recurring summary for all channels in a category
@@ -767,7 +768,8 @@ async def schedule_category_summary(
             interval_hours=interval_hours,
             lookback_duration=lookback,
             created_by_user_id=interaction.user.id,
-            days_of_week=days_of_week
+            days_of_week=days_of_week,
+            skip_private_channels=skip_private_channels
         )
         
         # Create and start the task

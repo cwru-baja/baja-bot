@@ -129,6 +129,7 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
     schedule_type = schedule['schedule_type']
     target_name = schedule['target_name']
     days_of_week = schedule.get('days_of_week')
+    skip_private_channels = schedule.get('skip_private_channels', True)
     
     # Check if today is in the allowed days
     if days_of_week:
@@ -176,8 +177,9 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
         elif schedule_type == 'category':
             # Category summary with sections
             await run_category_summary(
-                guild, channel_ids, cutoff_time, 
-                summarizer, output_channel, target_name, lookback_duration
+                guild, channel_ids, cutoff_time,
+                summarizer, output_channel, target_name, lookback_duration,
+                skip_private_channels=skip_private_channels
             )
         
         # Update last run timestamp
@@ -212,10 +214,10 @@ async def run_channel_summary(guild, channel_id, cutoff_time, summarizer, output
         await output_channel.send(message)
 
 
-async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, output_channel, category_name, lookback_duration):
+async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, output_channel, category_name, lookback_duration, skip_private_channels=True):
     """Run summary for a category (multiple channels with sections)"""
     channel_messages = {}
-    
+
     # Fetch messages from each channel (exclude non-serious channels like shitposting, memes)
     for channel_id in channel_ids:
         channel = guild.get_channel(channel_id)
@@ -226,12 +228,15 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
             logger.info(f"Excluding channel #{channel.name} from category summary (non-serious)")
             continue
 
-        if "private" in channel.name.lower():
-            logger.info(f"Skipping #{channel.name}: private channel")
-            continue
-
         logger.info(f"Fetching messages from #{channel.name} ({channel_id})")
-        messages = await fetch_messages_with_threads(channel, cutoff_time)
+        try:
+            messages = await fetch_messages_with_threads(channel, cutoff_time)
+        except discord.Forbidden:
+            if skip_private_channels:
+                logger.info(f"Skipping #{channel.name}: bot does not have access")
+                continue
+            else:
+                raise
         
         if messages:
             channel_messages[channel.name] = messages

@@ -58,14 +58,15 @@ class ScheduleStorage:
                     """)
                 return [dict(row) for row in cur.fetchall()]
     
-    def add_schedule(self, guild_id: int, channel_ids: List[int], 
+    def add_schedule(self, guild_id: int, channel_ids: List[int],
                      target_name: str, schedule_type: str,
-                     output_channel_id: int, start_time: dt_time, 
-                     interval_hours: int, lookback_duration: str, 
-                     created_by_user_id: int, days_of_week: Optional[List[int]] = None) -> int:
+                     output_channel_id: int, start_time: dt_time,
+                     interval_hours: int, lookback_duration: str,
+                     created_by_user_id: int, days_of_week: Optional[List[int]] = None,
+                     skip_private_channels: bool = True) -> int:
         """
         Add a new schedule and return its ID
-        
+
         Args:
             guild_id: Discord server ID
             channel_ids: List of channel IDs to summarize
@@ -77,22 +78,25 @@ class ScheduleStorage:
             lookback_duration: How far back to look for messages (e.g., '24h')
             created_by_user_id: Discord user ID who created the schedule
             days_of_week: Optional list of day numbers (0=Monday, 6=Sunday). None means every day.
-            
+            skip_private_channels: Whether to skip channels the bot cannot access. Defaults to True.
+
         Returns:
             The ID of the newly created schedule
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO scheduled_summaries 
-                    (guild_id, channel_ids, target_name, schedule_type, 
-                     output_channel_id, start_time, interval_hours, 
-                     lookback_duration, created_by_user_id, days_of_week)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO scheduled_summaries
+                    (guild_id, channel_ids, target_name, schedule_type,
+                     output_channel_id, start_time, interval_hours,
+                     lookback_duration, created_by_user_id, days_of_week,
+                     skip_private_channels)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
-                """, (guild_id, channel_ids, target_name, schedule_type, 
-                      output_channel_id, start_time, interval_hours, 
-                      lookback_duration, created_by_user_id, days_of_week))
+                """, (guild_id, channel_ids, target_name, schedule_type,
+                      output_channel_id, start_time, interval_hours,
+                      lookback_duration, created_by_user_id, days_of_week,
+                      skip_private_channels))
                 schedule_id = cur.fetchone()[0]
                 conn.commit()
                 return schedule_id
