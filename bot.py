@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -191,6 +192,7 @@ async def on_thread_create(thread: discord.Thread):
                 
                 if member:
                     await thread.add_user(member)
+                    await asyncio.sleep(1)
                     # logger.debug(f"Added user {member.name} to thread '{thread.name}'")
             except discord.Forbidden:
                 logger.warning(f"Missing permissions to add user {user_id} to thread '{thread.name}'")
@@ -867,11 +869,26 @@ async def list_schedules(interaction: discord.Interaction):
                 f"   Last run: {last_run_str}\n\n"
             )
         
-        # Discord has 2000 char limit, handle pagination if needed
-        if len(message) > 2000:
-            message = message[:1997] + "..."
-        
-        await discord_api.followup(message)
+        # Discord has 2000 char limit, split into multiple messages if needed
+        if len(message) <= 2000:
+            await discord_api.followup(message)
+        else:
+            # Split on double newlines (between schedule entries) to avoid cutting mid-entry
+            chunks = []
+            current_chunk = ""
+            for line in message.split("\n\n"):
+                segment = line + "\n\n"
+                if len(current_chunk) + len(segment) > 2000:
+                    if current_chunk:
+                        chunks.append(current_chunk.rstrip())
+                    current_chunk = segment
+                else:
+                    current_chunk += segment
+            if current_chunk.strip():
+                chunks.append(current_chunk.rstrip())
+
+            for chunk in chunks:
+                await discord_api.followup(chunk.strip())
         
     except Exception as e:
         logger.error(f"Error listing schedules: {e}", exc_info=True)
