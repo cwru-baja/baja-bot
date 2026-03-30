@@ -226,6 +226,10 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
             logger.info(f"Excluding channel #{channel.name} from category summary (non-serious)")
             continue
 
+        if "private" in channel.name.lower():
+            logger.info(f"Skipping #{channel.name}: private channel")
+            continue
+
         logger.info(f"Fetching messages from #{channel.name} ({channel_id})")
         messages = await fetch_messages_with_threads(channel, cutoff_time)
         
