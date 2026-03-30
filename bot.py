@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone, time as dt_time
+from logtail import LogtailHandler
 
 import aiohttp
 import discord
@@ -50,6 +51,12 @@ logging.basicConfig(
     stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
+
+logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
+if logtail_token:
+    logtail_handler = LogtailHandler(source_token=logtail_token)
+    logtail_handler.setLevel(logging.DEBUG)
+    logging.getLogger().addHandler(logtail_handler)
 
 
 # --- Validation Checks ---

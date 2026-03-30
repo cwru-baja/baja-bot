@@ -7,3 +7,4 @@ aiohttp~=3.13.2
 requests
 psycopg2-binary~=2.9.9
 pytz~=2024.1
+logtail-python~=0.3.2
