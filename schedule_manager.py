@@ -187,7 +187,8 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
         logger.info(f"Completed schedule #{schedule_id}")
         
     except Exception as e:
-        logger.error(f"Error executing schedule #{schedule_id}: {e}\n{traceback.format_exc()}")
+        tb = traceback.format_exc().replace("\n", " | ")
+        logger.error(f"Error executing schedule #{schedule_id}: {e} | {tb}")
 
 
 async def run_channel_summary(guild, channel_id, cutoff_time, summarizer, output_channel, channel_name, lookback_duration):
