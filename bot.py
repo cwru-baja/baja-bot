@@ -645,7 +645,6 @@ async def schedule_category_summary(
     interaction: discord.Interaction,
     category_name: str,
     time: str,
-    interval: str,
     lookback: str,
     output_channel: discord.TextChannel,
     days: str = None,
@@ -653,11 +652,10 @@ async def schedule_category_summary(
 ):
     """
     Schedule a recurring summary for all channels in a category
-    
+
     Args:
         category_name: Name of the category
         time: Time of day (e.g., "14:00" for 2:00 PM EST)
-        interval: How often to repeat (e.g., "24h", "12h", "1d")
         lookback: How far back to look (e.g., "24h", "1d")
         output_channel: Where to post summaries
         days: Optional days to run (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday"). Leave empty for every day.
@@ -707,7 +705,7 @@ async def schedule_category_summary(
             return
 
         channel_ids = [ch.id for ch in channels_to_summarize]
-        
+
         # Parse time string
         try:
             time_parts = time.split(':')
@@ -720,18 +718,9 @@ async def schedule_category_summary(
                 ephemeral=True
             )
             return
-        
-        # Parse interval
-        interval_delta = parse_duration(interval)
-        if not interval_delta or interval_delta.total_seconds() < 3600:
-            await discord_api.followup(
-                f"Invalid interval: '{interval}'. Must be at least 1 hour (e.g., '1h', '24h', '1d').",
-                ephemeral=True
-            )
-            return
-        
-        interval_hours = int(interval_delta.total_seconds() / 3600)
-        
+
+        interval_hours = 24
+
         # Validate lookback
         lookback_delta = parse_duration(lookback)
         if not lookback_delta:
@@ -796,7 +785,6 @@ async def schedule_category_summary(
             f"{excluded_note}"
             f"• Time: {time} {timezone_str}\n"
             f"{days_str}"
-            f"• Interval: Every {interval}\n"
             f"• Lookback: {lookback}\n"
             f"• Output: {output_channel.mention}\n\n"
             f"First summary will run at the next scheduled time."
@@ -960,6 +948,50 @@ async def remove_schedule(interaction: discord.Interaction, schedule_id: int):
     except Exception as e:
         logger.error(f"Error removing schedule: {e}", exc_info=True)
         await discord_api.followup(f"An error occurred: {str(e)}")
+
+
+@bot.tree.command(name="run-schedule", description="Force run a scheduled summary immediately")
+async def run_schedule(interaction: discord.Interaction, schedule_id: int):
+    """
+    Force run a scheduled summary immediately
+
+    Args:
+        schedule_id: The ID of the schedule to run (from /list-schedules)
+    """
+    logger.info(f"Run-schedule: by '{interaction.user.name}' for schedule #{schedule_id}")
+    discord_api = DiscordAPI(interaction)
+
+    await discord_api.think()
+
+    try:
+        schedule = schedule_storage.get_schedule(schedule_id)
+
+        if not schedule:
+            await discord_api.followup(
+                f"Schedule #{schedule_id} not found.",
+                ephemeral=True
+            )
+            return
+
+        if schedule['guild_id'] != interaction.guild.id:
+            await discord_api.followup(
+                "You can only run schedules from this server.",
+                ephemeral=True
+            )
+            return
+
+        target_name = schedule['target_name']
+        schedule_type = schedule['schedule_type']
+
+        await discord_api.followup(
+            f"▶️ Running schedule #{schedule_id} ({schedule_type}: {target_name})..."
+        )
+
+        await schedule_manager.run_scheduled_summary(schedule, bot, schedule_storage, ai_client)
+
+    except Exception as e:
+        logger.error(f"Error force-running schedule: {e}", exc_info=True)
+        await interaction.followup.send(f"An error occurred: {str(e)}")
 
 
 @bot.tree.command(name="set-timezone", description="Set the timezone for scheduled summaries")
