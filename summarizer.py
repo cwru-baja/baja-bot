@@ -40,6 +40,7 @@ class Summarizer:
             "1. IGNORE NOISE: completely ignore keyboard smashing (e.g., 'asdfjkl'), one-word reactions, and off-topic banter that leads nowhere.\n"
             "2. BE CLEAR: The title should adequately convey to someone unfamiliar with the conversation what it is about.\n"
             "3. BE SHORT: Keep the title short, no more than a few words."
+            "4. DO NOT USE NAMES: Do not include specific names in the summary."
         )
 
         return await self.ai_client.call_llm(system_instruction, messages)
