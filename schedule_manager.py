@@ -65,11 +65,8 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
     @tasks.loop(hours=interval_hours)
     async def scheduled_task():
         """The actual task that runs on schedule"""
-        try:
-            await run_scheduled_summary(schedule, bot, storage, ai_client)
-        except Exception as e:
-            logger.error(f"Error running schedule #{schedule_id}: {e}")
-    
+        await run_scheduled_summary(schedule, bot, storage, ai_client)
+
     # Set up the before_loop to wait until the start time
     @scheduled_task.before_loop
     async def before_task():
@@ -81,6 +78,10 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
         
         # Wait until the scheduled start time
         await wait_until_start_time(schedule['start_time'], timezone_str)
+
+    @scheduled_task.error
+    async def scheduled_task_error(error):
+        logger.error(f"Error running schedule #{schedule_id}: {error}")
     
     return scheduled_task
 

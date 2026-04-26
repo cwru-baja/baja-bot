@@ -47,12 +47,21 @@ notion_token = os.getenv('NOTION_TOKEN')
 
 # --- Loguru setup ---
 logger.remove()
-logger.add(sys.stdout, level="DEBUG", format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}")
+logger.add(
+    sys.stdout,
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    serialize=True
+)
 
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
     logtail_handler = LogtailHandler(source_token=logtail_token)
-    logger.add(logtail_handler, level="DEBUG")
+    logger.add(
+        logtail_handler,
+        level="DEBUG",
+        serialize=True
+    )
 
 # Intercept stdlib logging (discord.py, etc.) and route through loguru
 class InterceptHandler(logging.Handler):
