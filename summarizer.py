@@ -136,8 +136,13 @@ class Summarizer:
         title = await self.generate_title(transcript_content)
 
         if title:
+            # Trim any extra lines
+            title = title.split("\n")[0]
+
+            # Trim title if too long
             if len(title) > 100:
                 title = title[:100] + "..."
+
             return title
         else:
             return ""

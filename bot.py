@@ -180,7 +180,7 @@ async def on_message(message):
                         await message.channel.edit(name=new_title)
                         logger.info(f"Renamed thread '{old_name}' to '{new_title}'")
         except Exception as e:
-            logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
+            logger.exception(f"Failed to rename thread '{message.channel.name}': {e}")
 
     await bot.process_commands(message)
 
