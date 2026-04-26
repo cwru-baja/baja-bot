@@ -83,10 +83,15 @@ logging.basicConfig(
     force=True
 )
 
-# Reconfigure discord logger
-logging.getLogger("discord").handlers = [InterceptHandler()]
-logging.getLogger("discord").propagate = False
-logging.getLogger("discord").setLevel(logging.DEBUG)
+# Reconfigure discord loggers
+for name in [
+    "discord",
+    "discord.app_commands",
+    "discord.app_commands.tree",
+]:
+    logging.getLogger(name).handlers = [InterceptHandler()]
+    logging.getLogger(name).propagate = False
+    logging.getLogger(name).setLevel(logging.DEBUG)
 
 
 # --- Validation Checks ---
