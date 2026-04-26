@@ -1,3 +1,4 @@
+from loguru import logger
 from openai import AsyncOpenAI
 
 
@@ -23,11 +24,13 @@ class AIAPI:
         try:
             # Try primary robust model (Gemini 2.0 Flash)
             completion = await self.client.chat.completions.create(
-                model="google/gemini-2.0-flash-001",
+                # model="google/gemini-2.0-flash-001",
+                model="google/gemma-4-26b-a4b-it:free",
                 messages=messages_payload
             )
         except Exception as e:
-            print(f"Primary model failed: {e}. Falling back to auto...")
+            logger.warning(f"Primary model failed: {e}")
+            logger.warning("Falling back to auto")
             completion = await self.client.chat.completions.create(
                 model="openrouter/auto",
                 messages=messages_payload

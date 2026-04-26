@@ -236,6 +236,7 @@ async def run_category_summary(guild, channel_ids, cutoff_time, summarizer, outp
         logger.info(f"Fetching messages from #{channel.name} ({channel_id})")
         try:
             messages = await fetch_messages_with_threads(channel, cutoff_time)
+            logger.info(f"{len(messages)} messages fetched")
         except discord.Forbidden:
             if skip_private_channels:
                 logger.info(f"Skipping #{channel.name}: bot does not have access")
