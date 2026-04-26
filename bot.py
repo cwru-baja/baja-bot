@@ -68,14 +68,25 @@ if logtail_token:
 # Intercept stdlib logging (discord.py, etc.) and route through loguru
 class InterceptHandler(logging.Handler):
     def emit(self, record):
-        try:
-            level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
-        logger.info("Log not through loguru")
-        logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
+        logger.opt(
+            depth=6,
+            exception=record.exc_info
+        ).log(
+            record.levelname,
+            record.getMessage()
+        )
 
-logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+# Reconfigure base loggers
+logging.basicConfig(
+    handlers=[InterceptHandler()],
+    level=0,
+    force=True
+)
+
+# Reconfigure discord logger
+logging.getLogger("discord").handlers = [InterceptHandler()]
+logging.getLogger("discord").propagate = False
+logging.getLogger("discord").setLevel(logging.DEBUG)
 
 
 # --- Validation Checks ---
@@ -162,7 +173,7 @@ async def on_message(message):
                     new_title = await summarizer.get_title(messages)
                     if new_title:
                         await message.channel.edit(name=new_title)
-                        logging.info(f"Renamed thread '{old_name}' to '{new_title}'")
+                        logger.info(f"Renamed thread '{old_name}' to '{new_title}'")
         except Exception as e:
             logger.warning(f"Failed to rename thread '{message.channel.name}': {e}")
 
@@ -255,14 +266,14 @@ async def log_test(interaction: discord.Interaction):
     logger.error("Log test - error")
     logger.critical("Log test - critical")
 
-    logging.info("BEGIN ERROR LOG TEST")
+    logger.info("BEGIN ERROR LOG TEST")
     try:
         1/0
     except Exception:
         logger.exception("Expect error 1/0")
 
-    logging.info("END LOG TEST")
-    logging.info("BEGIN UNHANDLED EXCEPTION TEST")
+    logger.info("END LOG TEST")
+    logger.info("BEGIN UNHANDLED EXCEPTION TEST")
     1/0
 
 
@@ -399,7 +410,7 @@ async def get_part_update_view(part: Page) -> View:
     async def design_callback(interaction: discord.Interaction):
         await interaction.response.defer()
         selected = interaction.data["values"][0]
-        logging.info(f"Updated design status for \"{part_name}\" to \"{selected}\"")
+        logger.info(f"Updated design status for \"{part_name}\" to \"{selected}\"")
         # print(interaction.data["values"])
         await part.update(part.get_property("Design Status"), {
             "status": {
@@ -426,7 +437,7 @@ async def get_part_update_view(part: Page) -> View:
     async def po_callback(interaction: discord.Interaction):
         await interaction.response.defer()
         selected = interaction.data["values"][0]
-        logging.info(f"Updated po status for \"{part_name}\" to \"{selected}\"")
+        logger.info(f"Updated po status for \"{part_name}\" to \"{selected}\"")
         # print(interaction.data["values"])
         await part.update(part.get_property("PO Status"), {
             "status": {
@@ -453,7 +464,7 @@ async def get_part_update_view(part: Page) -> View:
     async def mfg_callback(interaction: discord.Interaction):
         await interaction.response.defer()
         selected = interaction.data["values"][0]
-        logging.info(f"Updated mfg status for \"{part_name}\" to \"{selected}\"")
+        logger.info(f"Updated mfg status for \"{part_name}\" to \"{selected}\"")
         # print(interaction.data["values"])
         await part.update(part.get_property("Mfg Status"), {
             "status": {
