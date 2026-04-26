@@ -42,4 +42,6 @@ class AIAPI:
                 messages=messages_payload
             )
 
+            logger.info(f"Used model {completion.model}")
+
         return completion.choices[0].message.content
