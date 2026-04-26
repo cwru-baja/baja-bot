@@ -39,11 +39,11 @@ async def load_all_schedules(bot, storage, ai_client):
                 active_schedule_tasks[schedule['id']] = task
                 logger.info(f"Started schedule #{schedule['id']}: {schedule['target_name']}")
             except Exception as e:
-                logger.error(f"Failed to start schedule #{schedule['id']}: {e}")
+                logger.exception(f"Failed to start schedule #{schedule['id']}: {e}")
         
         logger.info(f"Successfully loaded {len(active_schedule_tasks)} schedules")
     except Exception as e:
-        logger.error(f"Error loading schedules: {e}")
+        logger.exception(f"Error loading schedules: {e}")
 
 
 def create_schedule_task(schedule: Dict, bot, storage, ai_client):
@@ -65,11 +65,25 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
     @tasks.loop(hours=interval_hours)
     async def scheduled_task():
         """The actual task that runs on schedule"""
-        try:
-            await run_scheduled_summary(schedule, bot, storage, ai_client)
-        except Exception as e:
-            logger.error(f"Error running schedule #{schedule_id}: {e}")
-    
+        days_of_week = schedule.get('days_of_week')
+        guild_id = schedule['guild_id']
+        target_name = schedule['target_name']
+
+        # Check if today is in the allowed days
+        if days_of_week:
+            # Get guild timezone
+            timezone_str = storage.get_guild_timezone(guild_id)
+            tz = pytz.timezone(timezone_str)
+            now = datetime.now(tz)
+            current_day = now.weekday()  # 0=Monday, 6=Sunday
+
+            if current_day not in days_of_week:
+                logger.info(
+                    f"Skipping schedule #{schedule_id} - {target_name}: Today ({current_day}) is not in allowed days {days_of_week}")
+                return
+
+        await run_scheduled_summary(schedule, bot, storage, ai_client)
+
     # Set up the before_loop to wait until the start time
     @scheduled_task.before_loop
     async def before_task():
@@ -81,6 +95,10 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
         
         # Wait until the scheduled start time
         await wait_until_start_time(schedule['start_time'], timezone_str)
+
+    @scheduled_task.error
+    async def scheduled_task_error(error):
+        logger.exception(f"Error running schedule #{schedule_id}: {error}")
     
     return scheduled_task
 
@@ -128,21 +146,8 @@ async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
     lookback_duration = schedule['lookback_duration']
     schedule_type = schedule['schedule_type']
     target_name = schedule['target_name']
-    days_of_week = schedule.get('days_of_week')
     skip_private_channels = schedule.get('skip_private_channels', True)
-    
-    # Check if today is in the allowed days
-    if days_of_week:
-        # Get guild timezone
-        timezone_str = storage.get_guild_timezone(guild_id)
-        tz = pytz.timezone(timezone_str)
-        now = datetime.now(tz)
-        current_day = now.weekday()  # 0=Monday, 6=Sunday
-        
-        if current_day not in days_of_week:
-            logger.info(f"Skipping schedule #{schedule_id}: Today ({current_day}) is not in allowed days {days_of_week}")
-            return
-    
+
     logger.info(f"Running schedule #{schedule_id}: {target_name}")
     
     try:
