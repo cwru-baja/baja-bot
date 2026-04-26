@@ -22,15 +22,15 @@ class AIAPI:
         ]
 
         try:
-            # Try primary robust model (Gemini 2.0 Flash)
+            logger.info("Requesting primary model")
             completion = await self.client.chat.completions.create(
-                # model="google/gemini-2.0-flash-001",
-                model="google/gemma-4-26b-a4b-it:free",
+                model="openai/gpt-oss-20b:free",
                 messages=messages_payload
             )
         except Exception as e:
+
             logger.warning(f"Primary model failed: {e}")
-            logger.warning("Falling back to auto")
+            logger.warning("Falling back to second model")
             completion = await self.client.chat.completions.create(
                 model="openrouter/auto",
                 messages=messages_payload
