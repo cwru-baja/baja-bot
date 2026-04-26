@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone, time as dt_time
+
+from discord.ext.commands import Context
 from logtail import LogtailHandler
 from loguru import logger
 
@@ -113,7 +115,7 @@ async def on_ready():
         synced = await bot.tree.sync()
         logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
-        logger.error(f"Failed to sync commands: {e}")
+        logger.exception(f"Failed to sync commands: {e}")
     
     # Initialize schedule storage and load scheduled tasks
     try:
@@ -121,14 +123,14 @@ async def on_ready():
         logger.info("Schedule storage initialized")
         await schedule_manager.load_all_schedules(bot, schedule_storage, ai_client)
     except Exception as e:
-        logger.error(f"Failed to initialize scheduled summaries: {e}")
+        logger.exception(f"Failed to initialize scheduled summaries: {e}")
 
     # Initialize subscription storage
     try:
         subscription_storage = SubscriptionStorage()
         logger.info("Subscription storage initialized")
     except Exception as e:
-        logger.error(f"Failed to initialize subscription storage: {e}")
+        logger.exception(f"Failed to initialize subscription storage: {e}")
 
 
 @bot.event
@@ -220,10 +222,27 @@ async def on_thread_create(thread: discord.Thread):
             except discord.Forbidden:
                 logger.warning(f"Missing permissions to add user {user_id} to thread '{thread.name}'")
             except Exception as e:
-                logger.error(f"Failed to add user {user_id} to thread: {e}")
+                logger.exception(f"Failed to add user {user_id} to thread: {e}")
                 
     except Exception as e:
-        logger.error(f"Error in on_thread_create: {e}")
+        logger.exception(f"Error in on_thread_create: {e}")
+
+
+@bot.event
+async def on_command_error(ctx: Context, error):
+    if isinstance(error, commands.CommandNotFound):
+        logger.info(f"{ctx.author.name} sent unknown command {ctx.command}")
+        await ctx.send("Command not found.")
+    elif isinstance(error, commands.MissingPermissions):
+        logger.info(f"{ctx.author.name} sent command {ctx.command} with no permissions")
+        await ctx.send("You don't have permission to do that.")
+    else:
+        logger.exception(f"{ctx.command} failed, sent by {ctx.author.name}")
+        await ctx.send("An error occurred while running this command")
+
+
+# TESTING ONLY! Tests all the logs
+@bot.tree.command(name="log-test", description="Test logs")
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
@@ -645,7 +664,7 @@ async def schedule_summary(
         )
         
     except Exception as e:
-        logger.error(f"Error creating schedule: {e}", exc_info=True)
+        logger.exception(f"Error creating schedule: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
 
 
@@ -800,7 +819,7 @@ async def schedule_category_summary(
         )
         
     except Exception as e:
-        logger.error(f"Error creating category schedule: {e}", exc_info=True)
+        logger.exception(f"Error creating category schedule: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
 
 
@@ -904,7 +923,7 @@ async def list_schedules(interaction: discord.Interaction):
                 await discord_api.followup(chunk.strip())
         
     except Exception as e:
-        logger.error(f"Error listing schedules: {e}", exc_info=True)
+        logger.exception(f"Error listing schedules: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
 
 
@@ -955,7 +974,7 @@ async def remove_schedule(interaction: discord.Interaction, schedule_id: int):
         )
         
     except Exception as e:
-        logger.error(f"Error removing schedule: {e}", exc_info=True)
+        logger.exception(f"Error removing schedule: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
 
 
@@ -999,7 +1018,7 @@ async def run_schedule(interaction: discord.Interaction, schedule_id: int):
         await schedule_manager.run_scheduled_summary(schedule, bot, schedule_storage, ai_client)
 
     except Exception as e:
-        logger.error(f"Error force-running schedule: {e}", exc_info=True)
+        logger.exception(f"Error force-running schedule: {e}")
         await interaction.followup.send(f"An error occurred: {str(e)}")
 
 
@@ -1043,7 +1062,7 @@ async def set_timezone(interaction: discord.Interaction, timezone: str):
         )
         
     except Exception as e:
-        logger.error(f"Error setting timezone: {e}", exc_info=True)
+        logger.exception(f"Error setting timezone: {e}")
         await discord_api.followup(f"An error occurred: {str(e)}")
 
 

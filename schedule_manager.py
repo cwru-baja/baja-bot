@@ -39,11 +39,11 @@ async def load_all_schedules(bot, storage, ai_client):
                 active_schedule_tasks[schedule['id']] = task
                 logger.info(f"Started schedule #{schedule['id']}: {schedule['target_name']}")
             except Exception as e:
-                logger.error(f"Failed to start schedule #{schedule['id']}: {e}")
+                logger.exception(f"Failed to start schedule #{schedule['id']}: {e}")
         
         logger.info(f"Successfully loaded {len(active_schedule_tasks)} schedules")
     except Exception as e:
-        logger.error(f"Error loading schedules: {e}")
+        logger.exception(f"Error loading schedules: {e}")
 
 
 def create_schedule_task(schedule: Dict, bot, storage, ai_client):
@@ -98,7 +98,7 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
 
     @scheduled_task.error
     async def scheduled_task_error(error):
-        logger.error(f"Error running schedule #{schedule_id}: {error}")
+        logger.exception(f"Error running schedule #{schedule_id}: {error}")
     
     return scheduled_task
 
