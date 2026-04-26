@@ -21,6 +21,11 @@ class AIAPI:
             {"role": "user", "content": user_content}
         ]
 
+        logger.debug(f"System payload words: {len(system_instructions.split(" "))}")
+        # Get user content length
+        user_len = sum([len(msg["text"]) for msg in user_content if msg.get("text", None)])
+        logger.debug(f"User payload words: {len(user_len)}")
+
         try:
             logger.info("Requesting primary model")
             completion = await self.client.chat.completions.create(
