@@ -59,10 +59,12 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
     Returns:
         A tasks.loop task instance
     """
-    interval_hours = schedule['interval_hours']
     schedule_id = schedule['id']
-    
-    @tasks.loop(hours=interval_hours)
+    start_time = schedule['start_time']
+
+    logger.info(f"Scheduling schedule #{schedule_id} at {start_time.strftime('%H:%M %Z')}")
+
+    @tasks.loop(time=start_time)
     async def scheduled_task():
         """The actual task that runs on schedule"""
         days_of_week = schedule.get('days_of_week')
@@ -84,49 +86,11 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
 
         await run_scheduled_summary(schedule, bot, storage, ai_client)
 
-    # Set up the before_loop to wait until the start time
-    @scheduled_task.before_loop
-    async def before_task():
-        await bot.wait_until_ready()
-        
-        # Get guild timezone
-        guild_id = schedule['guild_id']
-        timezone_str = storage.get_guild_timezone(guild_id)
-        
-        # Wait until the scheduled start time
-        await wait_until_start_time(schedule['start_time'], timezone_str)
-
     @scheduled_task.error
     async def scheduled_task_error(error):
         logger.exception(f"Error running schedule #{schedule_id}: {error}")
     
     return scheduled_task
-
-
-async def wait_until_start_time(start_time: dt_time, timezone_str: str):
-    """
-    Wait until the specified start time in the given timezone
-    
-    Args:
-        start_time: Time of day to start (time object)
-        timezone_str: Timezone string (e.g., 'America/New_York')
-    """
-    tz = pytz.timezone(timezone_str)
-    now = datetime.now(tz)
-    
-    # Create datetime for today at the start time
-    target = tz.localize(datetime.combine(now.date(), start_time))
-    
-    # If the time has already passed today, schedule for tomorrow
-    if target <= now:
-        target = target + timedelta(days=1)
-    
-    # Calculate wait time
-    wait_seconds = (target - now).total_seconds()
-    
-    logger.info(f"Waiting {wait_seconds/3600:.2f} hours until {target.strftime('%Y-%m-%d %H:%M %Z')}")
-    
-    await discord.utils.sleep_until(target)
 
 
 async def run_scheduled_summary(schedule: Dict, bot, storage, ai_client):
