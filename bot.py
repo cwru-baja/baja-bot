@@ -243,6 +243,26 @@ async def on_command_error(ctx: Context, error):
 
 # TESTING ONLY! Tests all the logs
 @bot.tree.command(name="log-test", description="Test logs")
+async def log_test(interaction: discord.Interaction):
+    logger.info("BEGIN LOG TEST")
+
+    logger.trace("Log test - trace")
+    logger.debug("Log test - debug")
+    logger.info("Log test - info")
+    logger.success("Log test - success")
+    logger.warning("Log test - warning")
+    logger.error("Log test - error")
+    logger.critical("Log test - critical")
+
+    logging.info("BEGIN ERROR LOG TEST")
+    try:
+        1/0
+    except Exception:
+        logger.exception("Expect error 1/0")
+
+    logging.info("END LOG TEST")
+    logging.info("BEGIN UNHANDLED EXCEPTION TEST")
+    1/0
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
