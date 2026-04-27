@@ -31,17 +31,28 @@ class AIAPI:
             completion = await self.client.chat.completions.create(
                 # model="openai/gpt-oss-20b:free",
                 model="google/gemini-2.0-flash-001",
+                reasoning_effort="none",
                 messages=messages_payload
             )
         except Exception as e:
+            try:
+                logger.warning(f"Primary model failed: {e}")
+                logger.warning("Falling back to auto")
+                completion = await self.client.chat.completions.create(
+                    model="openrouter/auto",
+                    reasoning_effort="none",
+                    messages=messages_payload
+                )
+            except Exception as e:
+                logger.warning(f"Auto failed: {e}")
+                logger.warning("Falling back to free")
+                completion = await self.client.chat.completions.create(
+                    model="openrouter/free",
+                    reasoning_effort="none",
+                    messages=messages_payload
+                )
 
-            logger.warning(f"Primary model failed: {e}")
-            logger.warning("Falling back to auto")
-            completion = await self.client.chat.completions.create(
-                model="openrouter/auto",
-                messages=messages_payload
-            )
-
-            logger.info(f"Used model {completion.model}")
+        logger.info(f"Used model {completion.model}")
+        logger.info(f"Total tokens used: {completion.usage.total_tokens}")
 
         return completion.choices[0].message.content
