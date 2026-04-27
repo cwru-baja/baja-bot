@@ -29,7 +29,7 @@ class AIAPI:
         models_to_try = [
             ["Primary", "google/gemini-2.0-flash-001"],
             ["Auto", "openrouter/auto"],
-            #["Free", "openrouter/free"],
+            ["Free", "openrouter/free"],
         ]
 
         succeeded = False
