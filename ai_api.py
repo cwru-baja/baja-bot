@@ -28,7 +28,7 @@ class AIAPI:
 
         models_to_try = [
             ["Primary", "google/gemini-2.0-flash-001"],
-            ["Secondary", "nvidia/nemotron-nano-12b-v2-vl:free"]
+            ["Secondary", "nvidia/nemotron-nano-12b-v2-vl:free"],
             ["Auto", "openrouter/auto"],
             ["Free", "openrouter/free"],
         ]
