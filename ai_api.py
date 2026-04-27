@@ -26,31 +26,34 @@ class AIAPI:
         user_len = sum([len(msg["text"]) for msg in user_content if msg.get("text", None)])
         logger.debug(f"User payload words: {user_len}")
 
-        try:
-            logger.info("Requesting primary model")
-            completion = await self.client.chat.completions.create(
-                # model="openai/gpt-oss-20b:free",
-                model="google/gemini-2.0-flash-001",
-                reasoning_effort="none",
-                messages=messages_payload
-            )
-        except Exception as e:
+        models_to_try = [
+            ["Primary", "google/gemini-2.0-flash-001"],
+            ["Auto", "openrouter/auto"],
+            #["Free", "openrouter/free"],
+        ]
+
+        succeeded = False
+        model_idx = 0
+        completion = None
+        while not succeeded:
+            name, model = models_to_try[model_idx]
+            logger.info(f"Calling {name} model: {model}")
             try:
-                logger.warning(f"Primary model failed: {e}")
-                logger.warning("Falling back to auto")
                 completion = await self.client.chat.completions.create(
-                    model="openrouter/auto",
+                    # model="openai/gpt-oss-20b:free",
+                    model=model,
                     reasoning_effort="none",
                     messages=messages_payload
                 )
+                succeeded = True
             except Exception as e:
-                logger.warning(f"Auto failed: {e}")
-                logger.warning("Falling back to free")
-                completion = await self.client.chat.completions.create(
-                    model="openrouter/free",
-                    reasoning_effort="none",
-                    messages=messages_payload
-                )
+                model_idx = model_idx + 1
+                logger.warning(f"{name} model failed: {e}")
+                if model_idx >= len(models_to_try):
+                    # Out of models, raise the exception again
+                    raise e
+                next_name, next_model = models_to_try[model_idx]
+                logger.warning(f"Falling back to {next_name}")
 
         logger.info(f"Used model {completion.model}")
         logger.info(f"Total tokens used: {completion.usage.total_tokens}")
