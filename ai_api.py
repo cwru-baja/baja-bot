@@ -35,7 +35,6 @@ class AIAPI:
 
         succeeded = False
         model_idx = 0
-        completion = None
         while not succeeded:
             name, model = models_to_try[model_idx]
             logger.info(f"Calling {name} model: {model}")
