@@ -25,6 +25,7 @@ class Summarizer:
             "4. IMAGES: Integrate image descriptions into the context of the conversation (e.g., 'User shared a photo of a steak while discussing dinner') rather than listing them separately at the end.\n"
             "5. BREVITY: Keep the summary under 150 words unless the transcript is massive.\n"
             "6. FORMAT: Use bullet points for distinct topics."
+            "7. OUTPUT ONLY THE SUMMARY: Do not output any explanation of your response or similar, only output the summary itself."
         )
 
         return await self.ai_client.call_llm(system_instruction, messages)
@@ -41,6 +42,11 @@ class Summarizer:
             "2. BE CLEAR: The title should adequately convey to someone unfamiliar with the conversation what it is about.\n"
             "3. BE SHORT: Keep the title short, no more than a few words."
             "4. DO NOT USE NAMES: Do not include specific names in the summary."
+            "5. DO NOT INCLUDE ANY FORMATTING: Omit any sort of markdown formatting."
+            "6. DO NOT USE ANY EXTRA WORDS: Omit words like \"Title\", only output the title itself."
+            "EXAMPLES:\n"
+            "- Gearbox FEA Review\n"
+            "- Package Delay Inquiry"
         )
 
         return await self.ai_client.call_llm(system_instruction, messages)
