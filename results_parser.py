@@ -23,10 +23,10 @@ class ResultsParser:
 
     def parse_statics(self, parsed):
         table_rows = parsed.select("table.table.table-striped.table-hover")[0].find_all("tr", recursive=False)
-        msg = "## Static event results:"
+        msg = "## Static event results:\n"
         for row in table_rows:
             # Something like "Cost Report Score (of 15): Not Yet Available"
             result_data = [data.text.strip() for data in row.find_all("td", recursive=False)][:2]
-            result_msg = f"*{result_data[0]}* {result_data[1]}"
+            result_msg = f"**{result_data[0]}** {result_data[1]}"
             msg += result_msg + "\n"
         return msg
