@@ -21,6 +21,7 @@ from ai_api import AIAPI
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
+from results_parser import ResultsParser
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
@@ -280,6 +281,17 @@ async def log_test(interaction: discord.Interaction):
     logger.info("END LOG TEST")
     logger.info("BEGIN UNHANDLED EXCEPTION TEST")
     1/0
+
+
+@bot.tree.command(name="live-results", description="Returns the live results for the current comp.")
+async def live_results(interaction: discord.Interaction):
+    logger.info(f"Live results request by {interaction.user.name}")
+    discord_api = DiscordAPI(interaction)
+
+    await discord_api.think()
+
+    results = ResultsParser().get_results()
+    await interaction.followup.send(results)
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
