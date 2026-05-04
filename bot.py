@@ -11,7 +11,7 @@ from loguru import logger
 
 import aiohttp
 import discord
-from discord import ButtonStyle, File, SelectOption
+from discord import ButtonStyle, File, SelectOption, app_commands
 from discord.ext import commands
 from discord.ui import View, Button, Select
 from dotenv import load_dotenv
@@ -21,6 +21,7 @@ from ai_api import AIAPI
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
+from results_parser import ResultsParser
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
@@ -280,6 +281,22 @@ async def log_test(interaction: discord.Interaction):
     logger.info("END LOG TEST")
     logger.info("BEGIN UNHANDLED EXCEPTION TEST")
     1/0
+
+
+@bot.tree.command(name="live-results", description="Returns the live results for the current comp.")
+@app_commands.choices(event = [
+    app_commands.Choice(name="statics",value="Static Events"),
+    app_commands.Choice(name="dynamics",value="Dynamic Events"),
+    app_commands.Choice(name="endurance",value="Endurance")
+])
+async def live_results(interaction: discord.Interaction, event:app_commands.Choice[str]):
+    logger.info(f"Live results request by {interaction.user.name}")
+    discord_api = DiscordAPI(interaction)
+
+    await discord_api.think()
+
+    results = ResultsParser().get_results(event)
+    await interaction.followup.send(results)
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
