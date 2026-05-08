@@ -285,9 +285,9 @@ async def log_test(interaction: discord.Interaction):
 
 @bot.tree.command(name="live-results", description="Returns the live results for the current comp.")
 @app_commands.choices(event = [
-    app_commands.Choice(name="statics",value="Static Events"),
-    app_commands.Choice(name="dynamics",value="Dynamic Events"),
-    app_commands.Choice(name="endurance",value="Endurance")
+    app_commands.Choice(value="statics",name="Static Events"),
+    app_commands.Choice(value="dynamics",name="Dynamic Events"),
+    app_commands.Choice(value="endurance",name="Endurance")
 ])
 async def live_results(interaction: discord.Interaction, event:app_commands.Choice[str]):
     logger.info(f"Live results request by {interaction.user.name}")
@@ -295,8 +295,12 @@ async def live_results(interaction: discord.Interaction, event:app_commands.Choi
 
     await discord_api.think()
 
-    results = ResultsParser().get_results(event)
-    await interaction.followup.send(results)
+    try:
+        results = ResultsParser().get_results(event.value)
+        await interaction.followup.send(results)
+    except Exception as e:
+        logger.exception(f"Error in live_results: {e}")
+        await interaction.followup.send("Error processing this command!")
 
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
