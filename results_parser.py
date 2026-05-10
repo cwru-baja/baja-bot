@@ -9,6 +9,12 @@ class ResultsParser:
     base_url = "https://results.bajasae.net/MyResults.aspx"
     event_results_url = "https://results.bajasae.net/EventResults.aspx"
     static_event_names = {"businesspresentation", "costevent", "design"}
+    static_event_points = {
+        # BAJA_RULES_2026 Rev A, Figure C-1 (p. 93).
+        "businesspresentation": 70.0,
+        "costevent": 100.0,
+        "design": 150.0,
+    }
     supported_events = ("statics", "dynamics", "endurance")
     event_titles = {
         "statics": "Static event results",
@@ -23,6 +29,7 @@ class ResultsParser:
         self.car_request_url = self.base_url + f"?carnum={car_num}"
         self.session = requests.Session()
         self._event_results_cache = {}
+        self._event_results_page_cache = None
 
     def get_results(self, event="statics"):
         if event not in self.supported_events:
@@ -141,13 +148,27 @@ class ResultsParser:
             "Endurance results are not available yet.",
         )
 
-    def get_predicted_dynamic_scores(self, limit=10):
-        leaderboard = self._build_predicted_dynamic_leaderboard()
+    def get_predicted_scores(self, category="dynamic", limit=10):
+        title_map = {
+            "static": "Live Predicted Static Scores",
+            "dynamic": "Live Predicted Dynamic Scores",
+            "overall": "Live Predicted Overall Scores",
+        }
+        empty_map = {
+            "static": "No static event results are available yet.",
+            "dynamic": "No dynamic event results are available yet.",
+            "overall": "No static or dynamic event results are available yet.",
+        }
+
+        if category not in title_map:
+            raise ValueError("Category must be one of static, dynamic, overall")
+
+        leaderboard = self._build_predicted_leaderboard(category)
         if not leaderboard["available_events"]:
-            return "## Live Predicted Dynamic Scores\nNo dynamic event results are available yet."
+            return f"## {title_map[category]}\n{empty_map[category]}"
 
         lines = [
-            "## Live Predicted Dynamic Scores",
+            f"## {title_map[category]}",
             f"**Live now:** {len(leaderboard['available_events'])} event(s) | **{leaderboard['available_points']:.0f} pts** posted",
         ]
 
@@ -164,7 +185,7 @@ class ResultsParser:
                 score_info = team["event_scores"][event_name]
                 abbr = leaderboard["event_abbreviations"][event_name]
                 event_parts.append(
-                    f"**{abbr}:** {score_info['score']:.2f} (#{score_info['rank']})"
+                    f"{abbr} {score_info['score']:.2f} (#{score_info['rank']})"
                 )
 
             lines.append(
@@ -338,24 +359,24 @@ class ResultsParser:
             "Dynamic results are not available yet.",
         )
 
-    def _build_predicted_dynamic_leaderboard(self):
+    def _build_predicted_leaderboard(self, category):
         available_events = []
         pending_events = []
         team_totals = {}
         event_abbreviations = {}
         available_points = 0.0
 
-        for event_name in self._fetch_dynamic_event_names():
+        for event_name in self._fetch_scored_event_names(category):
             benchmark_rows = self._fetch_event_result_rows(event_name)
             if not benchmark_rows:
                 pending_events.append(event_name)
                 continue
 
-            event_type = self._infer_dynamic_event_type(event_name, rows=benchmark_rows)
+            event_type = self._infer_event_type(event_name, rows=benchmark_rows)
             possible_points = self._event_possible_points(event_name, event_type)
             event_scores = []
             for row in benchmark_rows:
-                score = self._score_dynamic_event(event_name, event_type, row, benchmark_rows)
+                score = self._score_event(event_name, event_type, row, benchmark_rows)
                 if score is None:
                     score = 0.0
 
@@ -399,6 +420,14 @@ class ResultsParser:
             "event_abbreviations": event_abbreviations,
             "ranked_teams": ranked_teams,
         }
+
+    def _fetch_scored_event_names(self, category):
+        event_names = []
+        if category in {"static", "overall"}:
+            event_names.extend(self._fetch_static_event_names())
+        if category in {"dynamic", "overall"}:
+            event_names.extend(self._fetch_dynamic_event_names())
+        return event_names
 
     def _group_dynamic_rows(self, rows):
         grouped = defaultdict(list)
@@ -485,9 +514,7 @@ class ResultsParser:
         if cache_key in self._event_results_cache:
             return self._event_results_cache[cache_key]
 
-        page = self.session.get(self.event_results_url, timeout=15)
-        page.raise_for_status()
-        parsed = BeautifulSoup(page.text, "html.parser")
+        parsed = self._get_event_results_page()
 
         selected_event_id = self._match_event_option(parsed, event_name)
         if selected_event_id is None:
@@ -503,7 +530,7 @@ class ResultsParser:
             "ctl00$MainContent$DropDownListEvents": selected_event_id,
         }
 
-        result_page = self.session.post(self.event_results_url, data=payload, timeout=15)
+        result_page = self.session.post(self.event_results_url, data=payload, timeout=30)
         result_page.raise_for_status()
         result_parsed = BeautifulSoup(result_page.text, "html.parser")
 
@@ -520,9 +547,7 @@ class ResultsParser:
         return benchmark_rows
 
     def _fetch_dynamic_event_names(self):
-        page = self.session.get(self.event_results_url, timeout=15)
-        page.raise_for_status()
-        parsed = BeautifulSoup(page.text, "html.parser")
+        parsed = self._get_event_results_page()
         select = parsed.select_one("#MainContent_DropDownListEvents")
         if select is None:
             return []
@@ -536,6 +561,31 @@ class ResultsParser:
                 continue
             dynamic_events.append(label)
         return dynamic_events
+
+    def _fetch_static_event_names(self):
+        parsed = self._get_event_results_page()
+        select = parsed.select_one("#MainContent_DropDownListEvents")
+        if select is None:
+            return []
+
+        static_events = []
+        for option in select.select("option"):
+            label = self._clean_text(option.get_text(" ", strip=True))
+            if not label:
+                continue
+            if self._normalize_event_name(label) not in self.static_event_names:
+                continue
+            static_events.append(label)
+        return static_events
+
+    def _get_event_results_page(self):
+        if self._event_results_page_cache is not None:
+            return self._event_results_page_cache
+
+        page = self.session.get(self.event_results_url, timeout=30)
+        page.raise_for_status()
+        self._event_results_page_cache = BeautifulSoup(page.text, "html.parser")
+        return self._event_results_page_cache
 
     def _input_value(self, parsed, element_id):
         element = parsed.select_one(f"#{element_id}")
@@ -605,6 +655,7 @@ class ResultsParser:
             "school_name": row.get("School Name", ""),
             "team_name": row.get("Team Name", ""),
             "status": row.get("Status", ""),
+            "final_score": self._first_number(row.get("Final Score")),
             "time": self._first_number(
                 row.get("Adjusted Time"),
                 row.get("Best Time"),
@@ -695,6 +746,14 @@ class ResultsParser:
             return min(timed_rows, key=lambda row: self._row_time_value(row))
 
         return rows[0]
+
+    def _score_event(self, event_name, event_type, team_row, benchmark_rows):
+        if event_type == "static":
+            return self._score_static_event(team_row)
+        return self._score_dynamic_event(event_name, event_type, team_row, benchmark_rows)
+
+    def _score_static_event(self, team_row):
+        return team_row.get("final_score")
 
     def _score_dynamic_event(self, event_name, event_type, team_row, benchmark_rows):
         team_time = self._row_time_value(team_row)
@@ -849,13 +908,26 @@ class ResultsParser:
             return "maneuverability"
         return "maneuverability"
 
+    def _infer_event_type(self, event_name, rows=None):
+        if self._normalize_event_name(event_name) in self.static_event_names:
+            return "static"
+        return self._infer_dynamic_event_type(event_name, rows=rows)
+
     def _event_possible_points(self, event_name, event_type):
+        if event_type == "static":
+            return self.static_event_points.get(self._normalize_event_name(event_name), 0.0)
         if event_type == "endurance":
             return self.endurance_event_points
         return self.dynamic_event_points
 
     def _event_abbreviation(self, event_name):
         normalized = self._normalize_event_name(event_name)
+        if normalized == "businesspresentation":
+            return "BP"
+        if normalized == "costevent":
+            return "Cost"
+        if normalized == "design":
+            return "Des"
         if "accel" in normalized:
             return "Accel"
         if "hill" in normalized:

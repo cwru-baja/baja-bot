@@ -305,16 +305,21 @@ async def live_results(interaction: discord.Interaction, event:app_commands.Choi
 
 @bot.tree.command(
     name="live-predicted-scores",
-    description="Shows the top 10 teams by predicted dynamic points from current live results.",
+    description="Shows the top 10 teams by live point totals for static, dynamic, or overall.",
 )
-async def live_predicted_scores(interaction: discord.Interaction):
+@app_commands.choices(category = [
+    app_commands.Choice(value="static", name="Static"),
+    app_commands.Choice(value="dynamic", name="Dynamic"),
+    app_commands.Choice(value="overall", name="Overall"),
+])
+async def live_predicted_scores(interaction: discord.Interaction, category: app_commands.Choice[str]):
     logger.info(f"Live predicted scores request by {interaction.user.name}")
     discord_api = DiscordAPI(interaction)
 
     await discord_api.think()
 
     try:
-        results = ResultsParser().get_predicted_dynamic_scores(limit=10)
+        results = ResultsParser().get_predicted_scores(category=category.value, limit=10)
         await interaction.followup.send(results)
     except Exception as e:
         logger.exception(f"Error in live_predicted_scores: {e}")
