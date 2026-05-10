@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 class ResultsParser:
     base_url = "https://results.bajasae.net/MyResults.aspx"
     event_results_url = "https://results.bajasae.net/EventResults.aspx"
+    endurance_leaderboard_url = "https://results.bajasae.net/Leaderboard.aspx?Event=ENDUR"
     static_event_names = {"businesspresentation", "costevent", "design"}
     static_event_points = {
         # BAJA_RULES_2026 Rev A, Figure C-1 (p. 93).
@@ -30,6 +31,7 @@ class ResultsParser:
         self.session = requests.Session()
         self._event_results_cache = {}
         self._event_results_page_cache = None
+        self._endurance_leaderboard_page_cache = None
 
     def get_results(self, event="statics"):
         if event not in self.supported_events:
@@ -157,7 +159,7 @@ class ResultsParser:
         empty_map = {
             "static": "No static event results are available yet.",
             "dynamic": "No dynamic event results are available yet.",
-            "overall": "No static or dynamic event results are available yet.",
+            "overall": "No static, dynamic, or endurance event results are available yet.",
         }
 
         if category not in title_map:
@@ -426,7 +428,10 @@ class ResultsParser:
         if category in {"static", "overall"}:
             event_names.extend(self._fetch_static_event_names())
         if category in {"dynamic", "overall"}:
-            event_names.extend(self._fetch_dynamic_event_names())
+            dynamic_events = self._fetch_dynamic_event_names()
+            event_names.extend(dynamic_events)
+            if not any(self._infer_dynamic_event_type(name) == "endurance" for name in dynamic_events):
+                event_names.append("Endurance")
         return event_names
 
     def _group_dynamic_rows(self, rows):
@@ -514,6 +519,12 @@ class ResultsParser:
         if cache_key in self._event_results_cache:
             return self._event_results_cache[cache_key]
 
+        event_type = self._infer_event_type(event_name)
+        if event_type == "endurance":
+            benchmark_rows = self._fetch_endurance_leaderboard_rows()
+            self._event_results_cache[cache_key] = benchmark_rows
+            return benchmark_rows
+
         parsed = self._get_event_results_page()
 
         selected_event_id = self._match_event_option(parsed, event_name)
@@ -539,12 +550,24 @@ class ResultsParser:
             self._event_results_cache[cache_key] = []
             return []
 
-        event_type = self._infer_dynamic_event_type(event_name)
         raw_rows = self._parse_table_records(table)
         normalized_rows = [self._normalize_event_result_row(row) for row in raw_rows]
         benchmark_rows = self._aggregate_event_result_rows(normalized_rows, event_type)
         self._event_results_cache[cache_key] = benchmark_rows
         return benchmark_rows
+
+    def _fetch_endurance_leaderboard_rows(self):
+        parsed = self._get_endurance_leaderboard_page()
+        table = self._find_endurance_leaderboard_table(parsed)
+        if table is None:
+            return []
+
+        raw_rows = self._parse_table_records(table)
+        return [
+            self._normalize_endurance_leaderboard_row(row)
+            for row in raw_rows
+            if row.get("Car No.") or row.get("Car No")
+        ]
 
     def _fetch_dynamic_event_names(self):
         parsed = self._get_event_results_page()
@@ -586,6 +609,15 @@ class ResultsParser:
         page.raise_for_status()
         self._event_results_page_cache = BeautifulSoup(page.text, "html.parser")
         return self._event_results_page_cache
+
+    def _get_endurance_leaderboard_page(self):
+        if self._endurance_leaderboard_page_cache is not None:
+            return self._endurance_leaderboard_page_cache
+
+        page = self.session.get(self.endurance_leaderboard_url, timeout=30)
+        page.raise_for_status()
+        self._endurance_leaderboard_page_cache = BeautifulSoup(page.text, "html.parser")
+        return self._endurance_leaderboard_page_cache
 
     def _input_value(self, parsed, element_id):
         element = parsed.select_one(f"#{element_id}")
@@ -649,6 +681,16 @@ class ResultsParser:
                 return table
         return None
 
+    def _find_endurance_leaderboard_table(self, parsed):
+        for table in parsed.select("table"):
+            headers = self._table_headers(table)
+            if not headers:
+                continue
+            normalized_headers = {self._normalize_event_name(header) for header in headers}
+            if "carno" in normalized_headers and "laps" in normalized_headers:
+                return table
+        return None
+
     def _normalize_event_result_row(self, row):
         return {
             "car_no": row.get("Car No.", row.get("Car No")),
@@ -656,6 +698,12 @@ class ResultsParser:
             "team_name": row.get("Team Name", ""),
             "status": row.get("Status", ""),
             "final_score": self._first_number(row.get("Final Score")),
+            "position": self._parse_int(
+                row.get("Position"),
+                row.get("Current Position"),
+                row.get("Pos."),
+            ),
+            "laps": self._first_number(row.get("# of Laps"), row.get("Laps")),
             "time": self._first_number(
                 row.get("Adjusted Time"),
                 row.get("Best Time"),
@@ -667,6 +715,23 @@ class ResultsParser:
                 row.get("Best Distance"),
                 row.get("Distance"),
             ),
+        }
+
+    def _normalize_endurance_leaderboard_row(self, row):
+        return {
+            "car_no": row.get("Car No.", row.get("Car No")),
+            "school_name": "",
+            "team_name": row.get("School / Team Name", row.get("Team Name", "")),
+            "status": "",
+            "final_score": None,
+            "position": self._parse_int(
+                row.get("Pos."),
+                row.get("Position"),
+                row.get("Current Position"),
+            ),
+            "laps": self._first_number(row.get("Laps"), row.get("# of Laps")),
+            "time": self._first_number(row.get("Last Lap Time"), row.get("Best Lap Time")),
+            "distance": None,
         }
 
     def _aggregate_event_result_rows(self, rows, event_type):
@@ -686,6 +751,12 @@ class ResultsParser:
     def _choose_best_result_row(self, rows, event_type):
         if not rows:
             return {}
+
+        if event_type == "endurance":
+            return rows[0]
+
+        if event_type == "static":
+            return rows[0]
 
         if event_type == "acceleration":
             timed_rows = [
@@ -750,6 +821,8 @@ class ResultsParser:
     def _score_event(self, event_name, event_type, team_row, benchmark_rows):
         if event_type == "static":
             return self._score_static_event(team_row)
+        if event_type == "endurance":
+            return self._score_endurance(team_row, benchmark_rows)
         return self._score_dynamic_event(event_name, event_type, team_row, benchmark_rows)
 
     def _score_static_event(self, team_row):
@@ -892,6 +965,48 @@ class ResultsParser:
         score = lowest_group_one_score * (team_distance / full_distance)
         return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
+    def _score_endurance(self, team_row, benchmark_rows):
+        team_laps = self._row_laps_value(team_row)
+        rows_with_laps = [
+            row for row in benchmark_rows
+            if self._row_laps_value(row) is not None
+        ]
+        if team_laps is None or not rows_with_laps:
+            return None
+
+        lap_counts = [self._row_laps_value(row) for row in rows_with_laps]
+        lmax = max(lap_counts)
+        lmin = min(lap_counts)
+        bonus = self._endurance_bonus_points(team_row, rows_with_laps, lmax)
+
+        if self._is_close(lmax, lmin):
+            base_score = self.endurance_event_points if lmax > 0.0 else 0.0
+        else:
+            # BAJA_RULES_2026 Rev A, D.8.6.6 (pp. 114-115).
+            base_score = self.endurance_event_points * (team_laps - lmin) / (lmax - lmin)
+
+        score = base_score + bonus
+        return round(max(0.0, score), 2)
+
+    def _endurance_bonus_points(self, team_row, rows_with_laps, lmax):
+        if lmax <= 0.0 or not self._is_close(self._row_laps_value(team_row), lmax):
+            return 0.0
+
+        lead_lap_rows = [
+            row for row in rows_with_laps
+            if self._is_close(self._row_laps_value(row), lmax)
+        ]
+        lead_lap_rows.sort(
+            key=lambda row: self._parse_int(row.get("position")) or 9999
+        )
+
+        bonus_pool = min(10, len(lead_lap_rows))
+        team_car_no = team_row.get("car_no")
+        for index, row in enumerate(lead_lap_rows[:bonus_pool], start=1):
+            if row.get("car_no") == team_car_no:
+                return float(bonus_pool - index + 1)
+        return 0.0
+
     def _infer_dynamic_event_type(self, event_name, rows=None):
         normalized = self._normalize_event_name(event_name)
         if "accel" in normalized:
@@ -1012,6 +1127,11 @@ class ResultsParser:
             return row.get("distance")
         return self._team_row_distance(row)
 
+    def _row_laps_value(self, row):
+        if "laps" in row:
+            return row.get("laps")
+        return self._first_number(row.get("Laps"), row.get("# of Laps"))
+
     def _first_number(self, *values):
         for value in values:
             parsed = self._parse_number(value)
@@ -1046,8 +1166,8 @@ class ResultsParser:
         except ValueError:
             return None
 
-    def _parse_int(self, value):
-        number = self._parse_number(value)
+    def _parse_int(self, *values):
+        number = self._first_number(*values)
         if number is None:
             return None
         return int(number)
