@@ -170,8 +170,7 @@ class ResultsParser:
             lines.append(
                 f"{index}. **#{team['car_no']} {team['display_name']}** — **{team['total_score']:.2f} pts**"
             )
-            for start in range(0, len(event_parts), 2):
-                lines.append(f"  - {' | '.join(event_parts[start:start + 2])}")
+            lines.append(f"  - {' | '.join(event_parts)}")
 
         message = "\n".join(lines)
         if len(message) > 1900:
@@ -858,13 +857,13 @@ class ResultsParser:
     def _event_abbreviation(self, event_name):
         normalized = self._normalize_event_name(event_name)
         if "accel" in normalized:
-            return "Acc"
+            return "Accel"
         if "hill" in normalized:
             return "Hill"
         if "traction" in normalized:
             return "Trac"
         if "maneuver" in normalized:
-            return "Man"
+            return "Maneuv"
         if "rock" in normalized:
             return "Rock"
         if "crawl" in normalized:
