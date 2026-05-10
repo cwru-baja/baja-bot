@@ -144,34 +144,39 @@ class ResultsParser:
     def get_predicted_dynamic_scores(self, limit=10):
         leaderboard = self._build_predicted_dynamic_leaderboard()
         if not leaderboard["available_events"]:
-            return "**Live predicted dynamic scores**\nNo dynamic event results are available yet."
+            return "## Live Predicted Dynamic Scores\nNo dynamic event results are available yet."
 
-        lines = []
-        for index, team in enumerate(leaderboard["ranked_teams"][:limit], start=1):
-            parts = [f"{abbr} {team['event_scores'][event_name]['score']:.2f} (#{team['event_scores'][event_name]['rank']})"
-                     for event_name, abbr in leaderboard["event_abbreviations"].items()
-                     if event_name in team["event_scores"]]
-            line = (
-                f"{index}. #{team['car_no']} {team['display_name']} - "
-                f"{team['total_score']:.2f} pts | {' | '.join(parts)}"
-            )
-            lines.append(line)
-
-        header = (
-            f"**Live predicted dynamic scores**\n"
-            f"Available now: {len(leaderboard['available_events'])} event(s), "
-            f"{leaderboard['available_points']:.0f} pts live "
-            f"(2026 rules total dynamic pool: 680 pts, PDF p. 103).\n"
-        )
+        lines = [
+            "## Live Predicted Dynamic Scores",
+            f"**Live now:** {len(leaderboard['available_events'])} event(s) | **{leaderboard['available_points']:.0f} pts** posted",
+        ]
 
         if leaderboard["pending_events"]:
-            header += "Pending: " + ", ".join(leaderboard["pending_events"]) + "\n"
+            lines.append(f"**Pending:** {', '.join(leaderboard['pending_events'])}")
 
-        return self._build_message(
-            "Live predicted dynamic scores",
-            lines,
-            "No dynamic event results are available yet.",
-        ).replace("**Live predicted dynamic scores**\n", header, 1)
+        lines.append("### Top 10")
+
+        for index, team in enumerate(leaderboard["ranked_teams"][:limit], start=1):
+            event_parts = []
+            for event_name in leaderboard["available_events"]:
+                if event_name not in team["event_scores"]:
+                    continue
+                score_info = team["event_scores"][event_name]
+                abbr = leaderboard["event_abbreviations"][event_name]
+                event_parts.append(
+                    f"**{abbr}:** {score_info['score']:.2f} (#{score_info['rank']})"
+                )
+
+            lines.append(
+                f"{index}. **#{team['car_no']} {team['display_name']}** — **{team['total_score']:.2f} pts**"
+            )
+            for start in range(0, len(event_parts), 2):
+                lines.append(f"  - {' | '.join(event_parts[start:start + 2])}")
+
+        message = "\n".join(lines)
+        if len(message) > 1900:
+            message = message[:1890].rstrip() + "\n..."
+        return message
 
     def _extract_no_results(self, panel, selector, fallback_text):
         no_results = panel.select_one(selector)
