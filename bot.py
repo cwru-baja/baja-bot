@@ -17,7 +17,7 @@ from discord.ui import View, Button, Select
 from dotenv import load_dotenv
 import pytz
 
-from ai_api import AIAPI
+from ai_api import AIAPI, DEFAULT_GEMINI_MODEL
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
@@ -45,6 +45,8 @@ PARTS_DATA_SOURCE_ID = "22d471ee-8bfe-8135-855c-000bba8ef8cc"
 load_dotenv()
 
 discord_token = os.getenv('DISCORD_TOKEN')
+gemini_api_key = os.getenv('GEMINI_API_KEY')
+gemini_thinking_budget_env = os.getenv('GEMINI_THINKING_BUDGET', '0')
 openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
 notion_token = os.getenv('NOTION_TOKEN')
 
@@ -95,21 +97,45 @@ for name in [
     logging.getLogger(name).setLevel(logging.DEBUG)
 
 
+def parse_optional_int(value: str | None, default: int | None = None) -> int | None:
+    if value is None or value.strip() == "":
+        return None
+
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(f"Invalid GEMINI_THINKING_BUDGET '{value}', using {default}")
+        return default
+
+
+gemini_thinking_budget = parse_optional_int(gemini_thinking_budget_env, default=0)
+
 # --- Validation Checks ---
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"DISCORD_TOKEN loaded: {bool(discord_token)}")
 logger.info(f"NOTION_TOKEN loaded: {bool(notion_token)}")
+if gemini_api_key:
+    logger.info(f"GEMINI_API_KEY loaded: Yes (Starts with {gemini_api_key[:4]}...)")
+    logger.info(f"Gemini primary model: {DEFAULT_GEMINI_MODEL}")
+    logger.info(f"GEMINI_THINKING_BUDGET: {gemini_thinking_budget}")
+else:
+    logger.warning("GEMINI_API_KEY loaded: No (Gemini primary disabled)")
+
 if openrouter_api_key:
     logger.info(f"OPENROUTER_API_KEY loaded: Yes (Starts with {openrouter_api_key[:4]}...)")
 else:
-    logger.warning("OPENROUTER_API_KEY loaded: No")
+    logger.warning("OPENROUTER_API_KEY loaded: No (OpenRouter fallback disabled)")
 
-if not discord_token or not openrouter_api_key or not notion_token:
-    logger.error("Error: token not found in .env file.")
+if not discord_token or not notion_token or not (gemini_api_key or openrouter_api_key):
+    logger.error("Error: DISCORD_TOKEN, NOTION_TOKEN, and at least one AI provider key (GEMINI_API_KEY or OPENROUTER_API_KEY) are required in .env file.")
     exit(1)
 
 # --- AI Configuration ---
-ai_client = AIAPI(openrouter_api_key)
+ai_client = AIAPI(
+    openrouter_api_key=openrouter_api_key,
+    gemini_api_key=gemini_api_key,
+    gemini_thinking_budget=gemini_thinking_budget,
+)
 
 notion_client = NotionAPI(notion_token)
 
