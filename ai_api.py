@@ -196,7 +196,14 @@ class AIAPI:
             if total_tokens is not None:
                 logger.info(f"Total tokens used: {total_tokens}")
 
-            content = completion.choices[0].message.content
+            # Sometimes choices is None for some reason
+            choices = completion.choices
+            if not choices:
+                last_error = RuntimeError("OpenRouter response returned no choices")
+                logger.warning(f"{name} model returned no choices")
+                continue
+
+            content = choices[0].message.content
             if not content:
                 last_error = RuntimeError("OpenRouter response did not contain text.")
                 logger.warning(f"{name} model returned an empty response")
