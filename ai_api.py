@@ -38,8 +38,11 @@ class AIAPI:
         if not self.gemini_client and not self.openrouter_client:
             raise ValueError("At least one AI provider key is required.")
 
-    async def call_llm(self, system_instructions, user_content) -> str:
-        """Call Gemini first, then fall back to OpenRouter if needed."""
+    async def call_llm(self, system_instructions, user_content, high_thought=False) -> str:
+        """
+        Make a call to an LLM. If high_thought is True, Gemini is used first and falls back to OpenRouter models,
+        otherwise OpenRouter models are used exclusively.
+        """
         logger.debug(f"System payload words: {len(system_instructions.split())}")
         user_len = sum(
             len(msg.get("text", ""))
@@ -48,8 +51,9 @@ class AIAPI:
         )
         logger.debug(f"User payload words: {user_len}")
 
-        gemini_error = None
-        if self.gemini_client:
+        # Only call Gemini if high_thought is True
+        if self.gemini_client and high_thought:
+            logger.info("High thought call requested, using Gemini")
             try:
                 return await self._call_gemini(system_instructions, user_content)
             except errors.APIError as e:

@@ -28,7 +28,8 @@ class Summarizer:
             "7. OUTPUT ONLY THE SUMMARY: Do not include any preamble, intro, label, explanation, or closing sentence. Never start with phrases like 'Here is the summary' or 'Summary:'."
         )
 
-        return await self.ai_client.call_llm(system_instruction, messages)
+        # This is a high thought operation
+        return await self.ai_client.call_llm(system_instruction, messages, high_thought=True)
 
 
     async def generate_title(self, messages) -> str:
@@ -252,8 +253,9 @@ class Summarizer:
             "## another-channel\n"
             "- Different topic covered"
         )
-        
-        summary = await self.ai_client.call_llm(system_instruction, user_content)
+
+        # This is a high thought operation
+        summary = await self.ai_client.call_llm(system_instruction, user_content, high_thought=True)
         
         if summary:
             # Normalize any accidental "## #" headings to "## ".
