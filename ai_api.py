@@ -58,16 +58,12 @@ class AIAPI:
             try:
                 return await self._call_gemini(system_instructions, user_content)
             except errors.APIError as e:
-                gemini_error = e
                 logger.warning(f"Gemini primary failed ({e.code}): {e.message}")
             except Exception as e:
-                gemini_error = e
                 logger.warning(f"Gemini primary failed: {e}")
 
             if self.openrouter_client:
                 logger.warning("Falling back to OpenRouter")
-            elif gemini_error:
-                raise gemini_error
 
         return await self._call_openrouter(system_instructions, user_content)
 
