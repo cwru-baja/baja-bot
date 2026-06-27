@@ -4,6 +4,7 @@ from typing import Any
 import aiohttp
 from google import genai
 from google.genai import errors, types
+from google.genai.types import Part
 from loguru import logger
 from openai import AsyncOpenAI
 
@@ -116,7 +117,10 @@ class AIAPI:
                 elif item_type == "image_url":
                     image_url = self._extract_image_url(item)
                     if image_url:
-                        contents.append(await self._download_image_part(session, image_url))
+                        image_part = await self._download_image_part(session, image_url)
+                        # If we successfully got an image
+                        if image_part:
+                            contents.append(image_part)
 
         if not contents:
             raise ValueError("No user content was provided to Gemini.")
@@ -132,21 +136,23 @@ class AIAPI:
             return image_url
         return None
 
-    async def _download_image_part(self, session: aiohttp.ClientSession, image_url: str) -> types.Part:
+    async def _download_image_part(self, session: aiohttp.ClientSession, image_url: str) -> Part | None:
         async with session.get(image_url) as response:
-            if response.status >= 400:
+            if not response.ok:
                 raise RuntimeError(f"Failed to fetch image for Gemini: HTTP {response.status}")
 
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > MAX_INLINE_IMAGE_BYTES:
-                raise RuntimeError("Image is too large to send inline to Gemini.")
+                logger.warning("Image is too large to send inline to Gemini.")
+                return None
 
             mime_type = self._get_image_mime_type(image_url, response.headers.get("Content-Type"))
             image_bytes = bytearray()
             async for chunk in response.content.iter_chunked(1024 * 1024):
                 image_bytes.extend(chunk)
                 if len(image_bytes) > MAX_INLINE_IMAGE_BYTES:
-                    raise RuntimeError("Image is too large to send inline to Gemini.")
+                    logger.warning("Image is too large to send inline to Gemini.")
+                    return None
 
         return types.Part.from_bytes(data=bytes(image_bytes), mime_type=mime_type)
 
