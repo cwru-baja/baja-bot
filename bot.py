@@ -309,6 +309,31 @@ async def log_test(interaction: discord.Interaction):
     1/0
 
 
+@bot.tree.command(name="rename-thread", description="Rename the current thread.")
+async def rename_thread(interaction: discord.Interaction, *args):
+    logger.info(f"Thread rename request by {interaction.user.name}")
+    await interaction.response.defer()
+
+    text = " ".join(args)
+    if not text:
+        logger.info("Thread rename aborted, no name provided")
+        interaction.followup.send("Please provide a name for the thread!", ephemeral=True)
+        return
+
+    if not isinstance(interaction.channel, discord.Thread):
+        logger.info("Thread rename aborted, not a thread")
+        interaction.followup.send("This command can only rename threads!", ephemeral=True)
+        return
+
+    old_name = interaction.channel.name
+    new_title = text
+    await interaction.channel.edit(name=new_title)
+    logger.info(f"Renamed thread '{old_name}' to '{new_title}'")
+    await interaction.followup.send("Renamed thread!", ephemeral=True)
+
+
+
+
 @bot.tree.command(name="live-results", description="Returns the live results for the current comp.")
 @app_commands.choices(event = [
     app_commands.Choice(value="statics",name="Static Events"),
@@ -605,6 +630,7 @@ async def get_part(interaction: discord.Interaction, search_term: str):
             }
         ]
 
+        # FIXME: Make this use a different method.
         base_result = await notion_client.query_data(PARTS_DATA_SOURCE_ID, filter=filter_object, sorts=sort_object)
         search_results = base_result.results
         has_more = base_result.has_more
