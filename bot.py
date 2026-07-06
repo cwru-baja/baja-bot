@@ -312,8 +312,8 @@ async def log_test(interaction: discord.Interaction):
 @bot.tree.command(name="rename-thread", description="Rename the current thread.")
 @app_commands.describe(text="The new name for the thread")
 async def rename_thread(interaction: discord.Interaction, text: str):
-    logger.info(f"Thread rename request by {interaction.user.name}")
-    await interaction.response.defer()
+    logger.info(f"Thread rename request in {interaction.channel} by {interaction.user.name}")
+    await interaction.response.defer(ephemeral=True)
 
     if not text:
         logger.info("Thread rename aborted, no name provided")
