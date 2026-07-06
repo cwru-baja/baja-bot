@@ -66,7 +66,7 @@ if logtail_token:
     logger.add(
         logtail_handler,
         level="DEBUG",
-        serialize=True
+        serialize=False
     )
 
 logger.patch(add_trace_id)
