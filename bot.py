@@ -17,6 +17,7 @@ from discord.ui import View, Button, Select
 from dotenv import load_dotenv
 import pytz
 
+import utils
 from ai_api import AIAPI, DEFAULT_GEMINI_MODEL
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
@@ -291,6 +292,8 @@ async def log_test(interaction: discord.Interaction):
     new_trace()
 
     logger.info("BEGIN LOG TEST")
+
+    logger.info(f"Trace: {utils.trace_id.get()}")
 
     logger.trace("Log test - trace")
     logger.debug("Log test - debug")
