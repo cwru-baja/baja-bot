@@ -60,8 +60,6 @@ logger.add(
     serialize=True
 )
 
-logger.patch(add_trace_id)
-
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
     logtail_handler = LogtailHandler(source_token=logtail_token)
@@ -70,6 +68,8 @@ if logtail_token:
         level="DEBUG",
         serialize=True
     )
+
+logger.patch(add_trace_id)
 
 # Intercept stdlib logging (discord.py, etc.) and route through loguru
 class InterceptHandler(logging.Handler):

@@ -19,7 +19,9 @@ trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 def add_trace_id(record):
     """Used for initial setup only"""
+    record["extra"] = record.get("extra", {})
     record["extra"]["trace_id"] = trace_id.get()
+    record["trace_id"] = trace_id.get()
 
 
 def new_trace():
