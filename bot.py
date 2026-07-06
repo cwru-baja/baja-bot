@@ -29,7 +29,7 @@ from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week, \
-    is_channel_excluded_from_summary, add_trace_id, parse_optional_int, new_trace
+    is_channel_excluded_from_summary, add_trace_id, parse_optional_int, new_trace, trace_id
 
 # Bot config values
 messages_before_rename = 5
@@ -69,7 +69,8 @@ if logtail_token:
         serialize=False
     )
 
-logger.patch(add_trace_id)
+# logger.patch(add_trace_id)
+logger.patch(lambda record: record["extra"].update(trace_id=trace_id.get()))
 
 # Intercept stdlib logging (discord.py, etc.) and route through loguru
 class InterceptHandler(logging.Handler):
