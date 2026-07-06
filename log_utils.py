@@ -1,4 +1,5 @@
 import contextvars
+import logging
 import uuid
 
 from logtail import LogtailHandler
@@ -16,13 +17,7 @@ def new_trace():
     trace_id.set(str(uuid.uuid4()))
 
 
-class TraceLogtailHandler(LogtailHandler):
-    def emit(self, record):
-        # inject trace_id into the structured payload
-        if not hasattr(record, "extra"):
-            record.extra = {}
-
-        record.extra["trace_id"] = trace_id.get()
+class TraceFilter(logging.Filter):
+    def filter(self, record):
         record.trace_id = trace_id.get()
-
-        return super().emit(record)
+        return True

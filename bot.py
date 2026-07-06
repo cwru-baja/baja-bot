@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timezone, time as dt_time
 
 from discord.ext.commands import Context
+from logtail import LogtailHandler
 from loguru import logger
 
 import aiohttp
@@ -22,7 +23,7 @@ from ai_api import AIAPI, DEFAULT_GEMINI_MODEL
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
-from log_utils import TraceLogtailHandler, new_trace
+from log_utils import new_trace
 from results_parser import ResultsParser
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
@@ -63,7 +64,8 @@ logger.add(
 
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
-    logtail_handler = TraceLogtailHandler(source_token=logtail_token)
+    logtail_handler = LogtailHandler(source_token=logtail_token)
+    logtail_handler.addFilter(log_utils.TraceFilter())
     logger.add(
         logtail_handler,
         level="DEBUG",
