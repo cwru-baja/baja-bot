@@ -317,12 +317,12 @@ async def rename_thread(interaction: discord.Interaction, text: str):
 
     if not text:
         logger.info("Thread rename aborted, no name provided")
-        interaction.followup.send("Please provide a name for the thread!", ephemeral=True)
+        await interaction.followup.send("Please provide a name for the thread!", ephemeral=True)
         return
 
     if not isinstance(interaction.channel, discord.Thread):
         logger.info("Thread rename aborted, not a thread")
-        interaction.followup.send("This command can only rename threads!", ephemeral=True)
+        await interaction.followup.send("This command can only rename threads!", ephemeral=True)
         return
 
     old_name = interaction.channel.name
