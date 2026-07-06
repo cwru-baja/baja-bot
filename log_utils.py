@@ -23,5 +23,6 @@ class TraceLogtailHandler(LogtailHandler):
             record.extra = {}
 
         record.extra["trace_id"] = trace_id.get()
+        record["trace_id"] = trace_id.get()
 
         return super().emit(record)
