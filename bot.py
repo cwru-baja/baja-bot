@@ -27,8 +27,8 @@ from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
-from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week, is_channel_excluded_from_summary
-
+from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week, \
+    is_channel_excluded_from_summary, add_trace_id, parse_optional_int, new_trace
 
 # Bot config values
 messages_before_rename = 5
@@ -58,6 +58,8 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
     serialize=True
 )
+
+logger.patch(add_trace_id)
 
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
@@ -97,18 +99,9 @@ for name in [
     logging.getLogger(name).setLevel(logging.DEBUG)
 
 
-def parse_optional_int(value: str | None, default: int | None = None) -> int | None:
-    if value is None or value.strip() == "":
-        return None
-
-    try:
-        return int(value)
-    except ValueError:
-        logger.warning(f"Invalid GEMINI_THINKING_BUDGET '{value}', using {default}")
-        return default
-
-
 gemini_thinking_budget = parse_optional_int(gemini_thinking_budget_env, default=0)
+logger.info(f"Gemini thinking budget: {gemini_thinking_budget}")
+
 
 # --- Validation Checks ---
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -179,6 +172,9 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    """
+    Fired for every message. Used for detecting when threads need to be renamed.
+    """
     # Ignore messages sent by the bot itself to prevent infinite loops
     if message.author == bot.user:
         return
@@ -190,6 +186,8 @@ async def on_message(message):
                 return
                 
             if message.channel.starter_message.clean_content.startswith(message.channel.name):
+                new_trace()
+
                 discord_api = DiscordAPI(message)
                 summarizer = Summarizer(ai_client)
                 messages = await discord_api.get_messages(limit=messages_before_rename+15)
@@ -218,9 +216,11 @@ async def on_thread_create(thread: discord.Thread):
     Event handler for when a new thread is created.
     Adds subscribed users to the thread.
     """
-    # logger.info(f"Thread created: {thread.name} in #{thread.parent.name}")
+    new_trace()
+    logger.info(f"Thread created: {thread.name} in #{thread.parent.name}")
     
     if not subscription_storage:
+        logger.warning("No subscription storage, skipping adding users")
         return
 
     try:
@@ -262,7 +262,7 @@ async def on_thread_create(thread: discord.Thread):
                 if member:
                     await thread.add_user(member)
                     await asyncio.sleep(1)
-                    # logger.debug(f"Added user {member.name} to thread '{thread.name}'")
+                    logger.debug(f"Added user {member.name} to thread '{thread.name}'")
             except discord.Forbidden:
                 logger.warning(f"Missing permissions to add user {user_id} to thread '{thread.name}'")
             except Exception as e:
@@ -288,6 +288,8 @@ async def on_command_error(ctx: Context, error):
 # TESTING ONLY! Tests all the logs
 @bot.tree.command(name="log-test", description="Test logs")
 async def log_test(interaction: discord.Interaction):
+    new_trace()
+
     logger.info("BEGIN LOG TEST")
 
     logger.trace("Log test - trace")
@@ -312,6 +314,8 @@ async def log_test(interaction: discord.Interaction):
 @bot.tree.command(name="rename-thread", description="Rename the current thread.")
 @app_commands.describe(text="The new name for the thread")
 async def rename_thread(interaction: discord.Interaction, text: str):
+    new_trace()
+
     logger.info(f"Thread rename request in {interaction.channel} by {interaction.user.name}")
     await interaction.response.defer(ephemeral=True)
 
@@ -332,8 +336,6 @@ async def rename_thread(interaction: discord.Interaction, text: str):
     await interaction.followup.send("Renamed thread!", ephemeral=True)
 
 
-
-
 @bot.tree.command(name="live-results", description="Returns the live results for the current comp.")
 @app_commands.choices(event = [
     app_commands.Choice(value="statics",name="Static Events"),
@@ -341,6 +343,8 @@ async def rename_thread(interaction: discord.Interaction, text: str):
     app_commands.Choice(value="endurance",name="Endurance")
 ])
 async def live_results(interaction: discord.Interaction, event:app_commands.Choice[str]):
+    new_trace()
+
     logger.info(f"Live results request by {interaction.user.name}")
     discord_api = DiscordAPI(interaction)
 
@@ -364,6 +368,8 @@ async def live_results(interaction: discord.Interaction, event:app_commands.Choi
     app_commands.Choice(value="overall", name="Overall"),
 ])
 async def live_predicted_scores(interaction: discord.Interaction, category: app_commands.Choice[str]):
+    new_trace()
+
     logger.info(f"Live predicted scores request by {interaction.user.name}")
     discord_api = DiscordAPI(interaction)
 
@@ -379,6 +385,8 @@ async def live_predicted_scores(interaction: discord.Interaction, category: app_
 
 @bot.tree.command(name="summarize", description="Summarizes the conversation in the current thread or channel.")
 async def summarize(interaction: discord.Interaction):
+    new_trace()
+
     logger.info(f"Summarize: by \"{interaction.user.name}\" in \"{interaction.channel.name}\"")
     summarizer = Summarizer(ai_client)
     discord_api = DiscordAPI(interaction)
@@ -403,6 +411,8 @@ async def summarize(interaction: discord.Interaction):
 
 @bot.tree.command(name="summarize-period", description="Summarizes messages within a time period (e.g., 2h, 1d).")
 async def summarize_period(interaction: discord.Interaction, duration: str):
+    new_trace()
+
     logger.info(
         f"Summarize-period: by \"{interaction.user.name}\" in \"{interaction.channel.name}\" for \"{duration}\"")
 
@@ -599,6 +609,8 @@ async def get_part_update_view(part: Page) -> View:
 
 @bot.tree.command(name="get-part", description="Gets information about a specified part from notion.")
 async def get_part(interaction: discord.Interaction, search_term: str):
+    new_trace()
+
     # await get_part_update_view(None)
     # return
     logger.info(f"Part request: by \"{interaction.user.name}\" for \"{search_term}\"")
@@ -704,6 +716,8 @@ async def schedule_summary(
         output_channel: Where to post summaries
         days: Optional days to run (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday"). Leave empty for every day.
     """
+    new_trace()
+
     logger.info(f"Schedule-summary: by '{interaction.user.name}' for #{channel.name}")
     discord_api = DiscordAPI(interaction)
     
@@ -821,6 +835,8 @@ async def schedule_category_summary(
         output_channel: Where to post summaries
         days: Optional days to run (e.g., "Mon,Wed,Fri" or "Monday,Wednesday,Friday"). Leave empty for every day.
     """
+    new_trace()
+
     logger.info(f"Schedule-category-summary: by '{interaction.user.name}' for category '{category_name}'")
     discord_api = DiscordAPI(interaction)
     
@@ -959,6 +975,8 @@ async def schedule_category_summary(
 @bot.tree.command(name="list-schedules", description="List all active scheduled summaries")
 async def list_schedules(interaction: discord.Interaction):
     """List all active scheduled summaries for this server"""
+    new_trace()
+
     logger.info(f"List-schedules: by '{interaction.user.name}'")
     discord_api = DiscordAPI(interaction)
     
@@ -1068,6 +1086,8 @@ async def remove_schedule(interaction: discord.Interaction, schedule_id: int):
     Args:
         schedule_id: The ID of the schedule to remove (from /list-schedules)
     """
+    new_trace()
+
     logger.info(f"Remove-schedule: by '{interaction.user.name}' for schedule #{schedule_id}")
     discord_api = DiscordAPI(interaction)
     
@@ -1119,6 +1139,8 @@ async def run_schedule(interaction: discord.Interaction, schedule_id: int):
     Args:
         schedule_id: The ID of the schedule to run (from /list-schedules)
     """
+    new_trace()
+
     logger.info(f"Run-schedule: by '{interaction.user.name}' for schedule #{schedule_id}")
     discord_api = DiscordAPI(interaction)
 
@@ -1163,6 +1185,8 @@ async def set_timezone(interaction: discord.Interaction, timezone: str):
     Args:
         timezone: Timezone name (e.g., 'America/New_York', 'America/Los_Angeles', 'UTC')
     """
+    new_trace()
+
     logger.info(f"Set-timezone: by '{interaction.user.name}' to '{timezone}'")
     discord_api = DiscordAPI(interaction)
     
@@ -1206,6 +1230,8 @@ async def subscribe_channel(interaction: discord.Interaction, channel: discord.T
     """
     Subscribe to a channel (current channel if not specified)
     """
+    new_trace()
+
     discord_api = DiscordAPI(interaction)
     target_channel = channel or interaction.channel
     
@@ -1228,6 +1254,8 @@ async def subscribe_category(interaction: discord.Interaction, category_name: st
     """
     Subscribe to a category
     """
+    new_trace()
+
     discord_api = DiscordAPI(interaction)
     
     # Find category (allow emoji/punctuation differences)
@@ -1269,6 +1297,8 @@ async def unsubscribe_channel(interaction: discord.Interaction, channel: discord
     """
     Unsubscribe from a channel
     """
+    new_trace()
+
     discord_api = DiscordAPI(interaction)
     target_channel = channel or interaction.channel
     
@@ -1291,6 +1321,8 @@ async def unsubscribe_category(interaction: discord.Interaction, category_name: 
     """
     Unsubscribe from a category
     """
+    new_trace()
+
     discord_api = DiscordAPI(interaction)
     
     # Find category
@@ -1325,6 +1357,8 @@ async def list_subscriptions(interaction: discord.Interaction):
     """
     List your active thread subscriptions
     """
+    new_trace()
+
     discord_api = DiscordAPI(interaction)
     subs = subscription_storage.get_user_subscriptions(interaction.guild.id, interaction.user.id)
     

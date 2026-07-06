@@ -7,7 +7,7 @@ from discord.ext import tasks
 
 from summarizer import Summarizer
 from discord_api import DiscordAPI
-from utils import parse_duration, is_channel_excluded_from_summary
+from utils import parse_duration, is_channel_excluded_from_summary, new_trace
 
 """
 Schedule manager for handling scheduled summary tasks.
@@ -67,6 +67,8 @@ def create_schedule_task(schedule: Dict, bot, storage, ai_client):
     @tasks.loop(time=start_time)
     async def scheduled_task():
         """The actual task that runs on schedule"""
+        new_trace()
+
         days_of_week = schedule.get('days_of_week')
         guild_id = schedule['guild_id']
         target_name = schedule['target_name']
