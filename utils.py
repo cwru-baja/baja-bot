@@ -11,23 +11,6 @@ if typing.TYPE_CHECKING:
     from baja_notion.page import Page
 
 
-# For logging purposes. Stores a trace_id to be used for all logs.
-trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "trace_id",
-    default=None,
-)
-
-def add_trace_id(record):
-    """Used for initial setup only, to attach trace_id to all logs"""
-    tid = trace_id.get()
-    record["extra"].update(trace_id=tid)
-
-
-def new_trace():
-    """Call whenever the trace_id must be set again. At the start of every traceable async method."""
-    trace_id.set(str(uuid.uuid4()))
-
-
 def parse_optional_int(value: str | None, default: int | None = None) -> int | None:
     if value is None or value.strip() == "":
         return None

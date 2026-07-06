@@ -5,9 +5,10 @@ import pytz
 import discord
 from discord.ext import tasks
 
+from log_utils import new_trace
 from summarizer import Summarizer
 from discord_api import DiscordAPI
-from utils import parse_duration, is_channel_excluded_from_summary, new_trace
+from utils import parse_duration, is_channel_excluded_from_summary
 
 """
 Schedule manager for handling scheduled summary tasks.

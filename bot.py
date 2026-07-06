@@ -22,6 +22,7 @@ from ai_api import AIAPI, DEFAULT_GEMINI_MODEL
 from discord_api import DiscordAPI
 from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
+from log_utils import TraceLogtailHandler, new_trace
 from results_parser import ResultsParser
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
@@ -29,7 +30,7 @@ from subscription_storage import SubscriptionStorage
 import schedule_manager
 # from OpenAIAPI import OpenAIAPI
 from utils import parse_duration, make_embed_from_part, make_part_title, normalize_category_name, parse_days_of_week, \
-    is_channel_excluded_from_summary, add_trace_id, parse_optional_int, new_trace, trace_id
+    is_channel_excluded_from_summary, parse_optional_int
 
 # Bot config values
 messages_before_rename = 5
@@ -62,15 +63,13 @@ logger.add(
 
 logtail_token = os.getenv('LOGTAIL_SOURCE_TOKEN')
 if logtail_token:
-    logtail_handler = LogtailHandler(source_token=logtail_token)
+    logtail_handler = TraceLogtailHandler(source_token=logtail_token)
     logger.add(
         logtail_handler,
         level="DEBUG",
         serialize=False
     )
 
-# logger.patch(add_trace_id)
-logger.patch(lambda record: record["extra"].update(trace_id=trace_id.get()))
 
 # Intercept stdlib logging (discord.py, etc.) and route through loguru
 class InterceptHandler(logging.Handler):
