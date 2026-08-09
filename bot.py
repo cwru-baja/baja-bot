@@ -1385,4 +1385,20 @@ async def list_subscriptions(interaction: discord.Interaction):
     await discord_api.send_message(msg, ephemeral=True)
 
 
+@bot.tree.command(name="search-user")
+async def search_user(interaction: discord.Interaction, name: str):
+    discord_api = DiscordAPI(interaction)
+    await discord_api.think()
+
+    matches = []
+    active_mem_role = discord_api.get_role("Active Member")
+
+    async for member in discord_api.fetch_members(limit=None):
+        if name.lower() in member.name.lower() or name.lower() in member.display_name.lower():
+            if active_mem_role in member.roles:
+                matches.append(member)
+
+    await discord_api.followup(f"Found users... {",".join([member.display_name for member in matches])}")
+
+
 bot.run(discord_token)

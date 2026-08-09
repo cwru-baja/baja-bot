@@ -1,6 +1,9 @@
+import discord
+
+
 class DiscordAPI:
     def __init__(self, interaction):
-        self.interaction = interaction
+        self.interaction: discord.Interaction = interaction
 
     async def get_messages(self, limit=500, before=None, after=None):
         """Gets all messages before or after a certain time, with a limit on the number of messages."""
@@ -65,3 +68,11 @@ class DiscordAPI:
         """Sends a regular message"""
         await self.interaction.response.send_message(message, **kwargs)
 
+    def get_role(self, role):
+        """Returns the role object with the specified name."""
+        return discord.utils.get(self.interaction.guild.roles, name=role)
+
+    async def fetch_members(self, **kwargs):
+        """Fetch members in the server."""
+        async for member in self.interaction.guild.fetch_members(**kwargs):
+            yield member
