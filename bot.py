@@ -1390,15 +1390,40 @@ async def search_user(interaction: discord.Interaction, name: str):
     discord_api = DiscordAPI(interaction)
     await discord_api.think()
 
-    matches = []
+    first_name = name.split()[0].lower()
+    last_name = name.split()[1].lower()
+
+    scored_matches = []
+
     active_mem_role = discord_api.get_role("Active Member")
 
     async for member in discord_api.fetch_members(limit=None):
-        if name.lower() in member.name.lower() or name.lower() in member.display_name.lower():
-            if active_mem_role in member.roles:
-                matches.append(member)
+        # Skip non-active members
+        if active_mem_role not in member.roles:
+            continue
 
-    await discord_api.followup(f"Found users... {",".join([member.display_name for member in matches])}")
+        display_name = member.display_name.lower()
+        username = member.name.lower()
+
+        has_first = first_name in display_name or first_name in username
+        has_last = last_name in display_name or last_name in username
+
+        # Precedence 1: Both first AND last name appear
+        if has_first and has_last:
+            scored_matches.append((3, member.top_role, member))
+        # Precedence 2: Last name only appears
+        elif has_last:
+            scored_matches.append((2, member.top_role, member))
+        # Precedence 3: First name only appears
+        elif has_first:
+            scored_matches.append((1, member.top_role, member))
+
+
+    if scored_matches:
+        scored_matches.sort(key=lambda m: m[1:], reverse=True)
+
+    # best_match = max(matches, key=lambda m: m.top_role)
+    await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
 
 
 bot.run(discord_token)
