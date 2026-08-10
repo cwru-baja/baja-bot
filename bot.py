@@ -7,6 +7,7 @@ from datetime import datetime, timezone, time as dt_time
 from os.path import split
 
 from discord.ext.commands import Context
+from flask import Flask
 from logtail import LogtailHandler
 from loguru import logger
 
@@ -144,6 +145,9 @@ intents.messages = True
 intents.members = True  # Required for nicknames
 
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Start Flask server (for handling webhooks)
+app = Flask(__name__)
 
 
 @bot.event
@@ -1427,6 +1431,16 @@ async def search_user(interaction: discord.Interaction, name: str):
 
     # best_match = max(matches, key=lambda m: m.top_role)
     await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
+
+
+@app.route("/")
+def index():
+    return "Baja Bot"
+
+# @app.route("/review", methods=["POST"])
+# def send_review_messages():
+#     if not request.is_json:
+#         return jsonify({"error": "Request must be JSON"}), 400
 
 
 bot.run(discord_token)
