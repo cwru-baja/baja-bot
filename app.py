@@ -13,6 +13,6 @@ def index():
 #     if not request.is_json:
 #         return jsonify({"error": "Request must be JSON"}), 400
 
-
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
