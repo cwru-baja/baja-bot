@@ -11,7 +11,7 @@ def index():
     return "Baja Bot"
 
 @app.route("/review", methods=["POST"])
-async def send_review_messages(data: dict):
+def send_review_messages(data: dict):
     url = data["data"]["url"]
     reviewers_dict = data["data"]["properties"]["Reviewers"]["people"]
     reviewers = [person["name"] for person in reviewers_dict.values()]
