@@ -15,8 +15,8 @@ def send_review_messages():
     data = request.get_json()
 
     url = data["data"]["url"]
-    reviewers_dict = data["data"]["properties"]["Reviewers"]["people"]
-    reviewers = [person["name"] for person in reviewers_dict.values()]
+    reviewers_dicts = data["data"]["properties"]["Reviewers"]["people"]
+    reviewers = [person["name"] for person in reviewers_dicts]
     reviewers_str = ", ".join(reviewers)
     gap_num = data["data"]["properties"]["GAP Number"]["formula"]["string"]
     review_message_storage.add_review_message(
