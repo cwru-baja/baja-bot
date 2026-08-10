@@ -209,7 +209,7 @@ async def process_review_message():
 
         embed = discord.Embed(
             title="GAP Review Required!",
-            description=f"A GAP document you are a reviewer for ({gap_num} {doc_name}) has been sent for review.\n"
+            description=f"A GAP document you are a reviewer for ({gap_num}, {doc_name}) has been sent for review.\n"
                         f"Please click [here]({url}), review the document, and take appropriate action.",
             color=discord.Color.red()
         )
