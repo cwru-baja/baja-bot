@@ -201,7 +201,7 @@ async def process_review_message():
         return
 
     reviewers = message["username"]
-    gap_num = message["extra_data"]
+    gap_num, doc_name = message["extra_data"].split(";")
     url = message["url"]
     id = message["id"]
     for reviewer in reviewers.split(", "):
@@ -209,7 +209,7 @@ async def process_review_message():
 
         embed = discord.Embed(
             title="GAP Review Required!",
-            description=f"A GAP document you are a reviewer for ([{gap_num}]({url})) has been sent for review.\n"
+            description=f"A GAP document you are a reviewer for ({gap_num} {doc_name}) has been sent for review.\n"
                         f"Please click [here]({url}), review the document, and take appropriate action.",
             color=discord.Color.red()
         )

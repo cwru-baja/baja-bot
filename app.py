@@ -23,10 +23,12 @@ def send_review_messages():
     reviewers = [person["name"] for person in reviewers_dicts]
     reviewers_str = ", ".join(reviewers)
     gap_num = data["data"]["properties"]["GAP Number"]["formula"]["string"]
+    doc_name = data["data"]["properties"]["Name"]["title"][0]["plain_text"]
+    extra_data = gap_num + ";" + doc_name
     review_message_storage.add_review_message(
         name=reviewers_str,
         url=url,
-        extra_data=gap_num
+        extra_data=extra_data
     )
     return {"ok": True}
 
