@@ -1450,6 +1450,6 @@ async def process_review_message():
 
     logger.info("Found a message!")
 
-
+process_review_message.start()
 
 bot.run(discord_token)
