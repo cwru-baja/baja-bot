@@ -15,7 +15,7 @@ from loguru import logger
 import aiohttp
 import discord
 from discord import ButtonStyle, File, SelectOption, app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import View, Button, Select
 from dotenv import load_dotenv
 import pytz
@@ -28,6 +28,7 @@ from baja_notion.notion_api import NotionAPI
 from baja_notion.page import Page
 from log_utils import new_trace
 from results_parser import ResultsParser
+from review_message_storage import ReviewMessageStorage
 from summarizer import Summarizer
 from schedule_storage import ScheduleStorage
 from subscription_storage import SubscriptionStorage
@@ -44,6 +45,7 @@ bot: commands.Bot = None
 notion_client: NotionAPI = None
 schedule_storage: ScheduleStorage = None
 subscription_storage: SubscriptionStorage = None
+review_message_storage: ReviewMessageStorage = None
 
 PARTS_DATA_SOURCE_ID = "22d471ee-8bfe-8135-855c-000bba8ef8cc"
 
@@ -105,6 +107,9 @@ for name in [
     logging.getLogger(name).setLevel(logging.DEBUG)
 
 
+# Load review message database immediately
+
+
 gemini_thinking_budget = parse_optional_int(gemini_thinking_budget_env, default=0)
 logger.info(f"Gemini thinking budget: {gemini_thinking_budget}")
 
@@ -150,7 +155,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    global schedule_storage, subscription_storage
+    global schedule_storage, subscription_storage, review_message_storage
     
     logger.info(f'Logged in as {bot.user.name}')
     try:
@@ -174,6 +179,13 @@ async def on_ready():
         logger.info("Subscription storage initialized")
     except Exception as e:
         logger.exception(f"Failed to initialize subscription storage: {e}")
+
+    # Load review messages storage
+    try:
+        review_message_storage = ReviewMessageStorage()
+        logger.info("Review messages storage initialized")
+    except Exception as e:
+        logger.exception(f"Failed to initialize review message storage: {e}")
 
 
 @bot.event
@@ -1388,7 +1400,6 @@ async def list_subscriptions(interaction: discord.Interaction):
     await discord_api.send_message(msg, ephemeral=True)
 
 
-@bot.tree.command(name="search-user")
 async def search_user(interaction: discord.Interaction, name: str):
     logger.info(f"Search-user: by '{interaction.user.name}' for name \"{name}\"")
     discord_api = DiscordAPI(interaction)
@@ -1429,6 +1440,14 @@ async def search_user(interaction: discord.Interaction, name: str):
 
     # best_match = max(matches, key=lambda m: m.top_role)
     await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
+
+
+@tasks.loop(seconds=1)
+async def process_review_message():
+    message = review_message_storage.get_one_message()
+    if message is None:
+        return
+
 
 
 bot.run(discord_token)

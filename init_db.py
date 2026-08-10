@@ -81,6 +81,17 @@ def init_database():
             );
         """)
 
+        print("Creating review_messages table...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS review_messages (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) NOT NULL,
+                url VARCHAR(255) NOT NULL,
+                action_type VARCHAR(20) NOT NULL,
+                extra_data VARCHAR(255)
+            );
+        """)
+
         print("Creating indexes...")
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_active_schedules 
