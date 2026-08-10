@@ -14,7 +14,7 @@ from loguru import logger
 
 import aiohttp
 import discord
-from discord import ButtonStyle, File, SelectOption, app_commands
+from discord import ButtonStyle, File, SelectOption, app_commands, Member
 from discord.ext import commands, tasks
 from discord.ui import View, Button, Select
 from dotenv import load_dotenv
@@ -205,13 +205,14 @@ async def process_review_message():
     url = message["url"]
     id = message["id"]
     for reviewer in reviewers.split(", "):
-        user = find_user(reviewer)
-        user.send(f"""
+        user = await find_user(reviewer)
+        await user.send(f"""
         A GAP document you are a reviewer for ({gap_num}) has been sent for review.\n
         Please click the URL below, review the document, and take appropriate action.\n
         \n
         {url}
         """)
+        logger.info(f"Sent review message for {gap_num} to {reviewer}")
 
     review_message_storage.delete_review_msg(id)
 
@@ -1428,7 +1429,7 @@ async def list_subscriptions(interaction: discord.Interaction):
     await discord_api.send_message(msg, ephemeral=True)
 
 
-async def find_user(name: str):
+async def find_user(name: str) -> Member:
     """Given a name, finds the user in the server"""
 
     logger.info(f"Find_user requested for name \"{name}\"")
