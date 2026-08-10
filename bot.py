@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone, time as dt_time
+from os.path import split
 
 from discord.ext.commands import Context
 from logtail import LogtailHandler
@@ -1387,11 +1388,13 @@ async def list_subscriptions(interaction: discord.Interaction):
 
 @bot.tree.command(name="search-user")
 async def search_user(interaction: discord.Interaction, name: str):
+    logger.info(f"Search-user: by '{interaction.user.name}' for name \"{name}\"")
     discord_api = DiscordAPI(interaction)
     await discord_api.think()
 
-    first_name = name.split()[0].lower()
-    last_name = name.split()[1].lower()
+    name_split = name.split()
+    first_name = name_split[0].lower()
+    last_name = name_split[1] if len(name_split) > 1 else "ZZZZZZZZ"
 
     scored_matches = []
 
