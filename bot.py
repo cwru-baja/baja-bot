@@ -147,9 +147,6 @@ intents.members = True  # Required for nicknames
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Start Flask server (for handling webhooks)
-app = Flask(__name__)
-
 
 @bot.event
 async def on_ready():
@@ -1434,22 +1431,4 @@ async def search_user(interaction: discord.Interaction, name: str):
     await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
 
 
-@app.route("/")
-def index():
-    return "Baja Bot"
-
-# @app.route("/review", methods=["POST"])
-# def send_review_messages():
-#     if not request.is_json:
-#         return jsonify({"error": "Request must be JSON"}), 400
-
-
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-if __name__ == "__main__":
-    flask_thread = Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    bot.run(discord_token)
+bot.run(discord_token)
