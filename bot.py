@@ -187,6 +187,20 @@ async def on_ready():
     except Exception as e:
         logger.exception(f"Failed to initialize review message storage: {e}")
 
+    if not process_review_message.is_running():
+        process_review_message.start()
+    logger.info("Started review message task")
+
+
+
+@tasks.loop(seconds=1)
+async def process_review_message():
+    message = review_message_storage.get_one_message()
+    if message is None:
+        return
+
+    logger.info("Found a message!")
+
 
 @bot.event
 async def on_message(message):
@@ -1441,15 +1455,5 @@ async def search_user(interaction: discord.Interaction, name: str):
     # best_match = max(matches, key=lambda m: m.top_role)
     await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
 
-
-@tasks.loop(seconds=1)
-async def process_review_message():
-    message = review_message_storage.get_one_message()
-    if message is None:
-        return
-
-    logger.info("Found a message!")
-
-process_review_message.start()
 
 bot.run(discord_token)
