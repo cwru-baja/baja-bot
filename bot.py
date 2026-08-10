@@ -151,6 +151,7 @@ intents.messages = True
 intents.members = True  # Required for nicknames
 
 bot = commands.Bot(command_prefix='!', intents=intents)
+server_id = 989705030632357938
 
 
 @bot.event
@@ -199,7 +200,20 @@ async def process_review_message():
     if message is None:
         return
 
-    logger.info("Found a message!")
+    reviewers = message["username"]
+    gap_num = message["extra_data"]
+    url = message["url"]
+    id = message["id"]
+    for reviewer in reviewers.split(", "):
+        user = find_user(reviewer)
+        user.send(f"""
+        A GAP document you are a reviewer for ({gap_num}) has been sent for review.\n
+        Please click the URL below, review the document, and take appropriate action.\n
+        \n
+        {url}
+        """)
+
+    review_message_storage.delete_review_msg(id)
 
 
 @bot.event
@@ -1414,10 +1428,11 @@ async def list_subscriptions(interaction: discord.Interaction):
     await discord_api.send_message(msg, ephemeral=True)
 
 
-async def search_user(interaction: discord.Interaction, name: str):
-    logger.info(f"Search-user: by '{interaction.user.name}' for name \"{name}\"")
-    discord_api = DiscordAPI(interaction)
-    await discord_api.think()
+async def find_user(name: str):
+    """Given a name, finds the user in the server"""
+
+    logger.info(f"Find_user requested for name \"{name}\"")
+    guild = bot.get_guild(server_id)
 
     name_split = name.split()
     first_name = name_split[0].lower()
@@ -1425,9 +1440,10 @@ async def search_user(interaction: discord.Interaction, name: str):
 
     scored_matches = []
 
-    active_mem_role = discord_api.get_role("Active Member")
+    discord.utils.get(guild.roles, name="Active Member")
+    active_mem_role = discord.utils.get(guild.roles, name="Active Member")
 
-    async for member in discord_api.fetch_members(limit=None):
+    async for member in guild.fetch_members(limit=None):
         # Skip non-active members
         if active_mem_role not in member.roles:
             continue
@@ -1452,8 +1468,7 @@ async def search_user(interaction: discord.Interaction, name: str):
     if scored_matches:
         scored_matches.sort(key=lambda m: m[1:], reverse=True)
 
-    # best_match = max(matches, key=lambda m: m.top_role)
-    await discord_api.followup(f"Found user... {",".join([member[2].display_name for member in scored_matches])}")
+    return scored_matches[0][2]
 
 
 bot.run(discord_token)
