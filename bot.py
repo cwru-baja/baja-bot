@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime, timezone, time as dt_time
 from os.path import split
+from threading import Thread
 
 from discord.ext.commands import Context
 from flask import Flask
@@ -1443,6 +1444,12 @@ def index():
 #         return jsonify({"error": "Request must be JSON"}), 400
 
 
-bot.run(discord_token)
-port = int(os.environ.get('PORT', 5000))
-app.run(host='0.0.0.0', port=port)
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+if __name__ == "__main__":
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    bot.run(discord_token)
