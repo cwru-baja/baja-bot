@@ -1448,6 +1448,8 @@ async def process_review_message():
     if message is None:
         return
 
+    logger.info("Found a message!")
+
 
 
 bot.run(discord_token)

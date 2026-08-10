@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask
+from flask import Flask, request
 
 from review_message_storage import ReviewMessageStorage
 
@@ -11,7 +11,9 @@ def index():
     return "Baja Bot"
 
 @app.route("/review", methods=["POST"])
-def send_review_messages(data: dict):
+def send_review_messages():
+    data = request.get_json()
+
     url = data["data"]["url"]
     reviewers_dict = data["data"]["properties"]["Reviewers"]["people"]
     reviewers = [person["name"] for person in reviewers_dict.values()]
