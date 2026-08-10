@@ -12,6 +12,10 @@ def index():
 
 @app.route("/review", methods=["POST"])
 def send_review_messages():
+    secret = request.headers.get('X-Webhook-Header')
+    if secret != "SecretWow1234":
+        return
+
     data = request.get_json()
 
     url = data["data"]["url"]
