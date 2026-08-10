@@ -206,12 +206,15 @@ async def process_review_message():
     id = message["id"]
     for reviewer in reviewers.split(", "):
         user = await find_user(reviewer)
-        await user.send(f"""
-        A GAP document you are a reviewer for ({gap_num}) has been sent for review.\n
-        Please click the URL below, review the document, and take appropriate action.\n
-        \n
-        {url}
-        """)
+
+        embed = discord.Embed(
+            title="GAP Review Required!",
+            description=f"A GAP document you are a reviewer for ([{gap_num}]({url})) has been sent for review.\n"
+                        f"Please click [here]({url}), review the document, and take appropriate action.",
+            color=discord.Color.red()
+        )
+
+        await user.send(embed=embed)
         logger.info(f"Sent review message for {gap_num} to {reviewer}")
 
     review_message_storage.delete_review_msg(id)
