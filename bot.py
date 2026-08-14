@@ -194,7 +194,7 @@ async def on_ready():
 
 
 
-@tasks.loop(seconds=1)
+@tasks.loop(seconds=10)
 async def process_review_message():
     message = review_message_storage.get_one_message()
     if message is None:
