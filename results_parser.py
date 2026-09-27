@@ -11,7 +11,7 @@ class ResultsParser:
     endurance_leaderboard_url = "https://results.bajasae.net/Leaderboard.aspx?Event=ENDUR"
     static_event_names = {"businesspresentation", "costevent", "design"}
     static_event_points = {
-        # BAJA_RULES_2026 Rev A, Figure C-1 (p. 93).
+        # BAJA_RULES_2026 Rev B, Figure C-1 (p. 95).
         "businesspresentation": 70.0,
         "costevent": 100.0,
         "design": 150.0,
@@ -842,10 +842,10 @@ class ResultsParser:
             return self._score_traction(team_time, team_distance, benchmark_rows)
 
         if self._specialty_uses_traction(benchmark_rows, team_row):
-            # BAJA_RULES_2026 Rev A, D.7.6 (p. 109) allows specialty events
+            # BAJA_RULES_2026 Rev B, D.7.6 (p. 111) allows specialty events
             # to use a Traction-style scoring option.
             return self._score_traction(team_time, team_distance, benchmark_rows)
-        # BAJA_RULES_2026 Rev A, D.7.6 (p. 109) allows specialty events
+        # BAJA_RULES_2026 Rev B, D.7.6 (p. 111) allows specialty events
         # to use a Maneuverability-style scoring option.
         return self._score_maneuverability(team_time, benchmark_rows)
 
@@ -856,6 +856,8 @@ class ResultsParser:
         ]
         if team_time is None or not timed_rows:
             return None
+        if team_time <= 0.0:
+            return 0.0
 
         tmin = min(row["time"] for row in timed_rows)
         tmax = min(max(row["time"] for row in timed_rows), 1.5 * tmin)
@@ -864,7 +866,7 @@ class ResultsParser:
         if team_time > tmax:
             return 0.0
 
-        # BAJA_RULES_2026 Rev A, D.4.6 (pp. 104-105).
+        # BAJA_RULES_2026 Rev B, D.4.6 (pp. 106-107).
         score = self.dynamic_event_points * (tmax - team_time) / (tmax - tmin)
         return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
@@ -875,6 +877,8 @@ class ResultsParser:
         ]
         if team_time is None or not timed_rows:
             return None
+        if team_time <= 0.0:
+            return 0.0
 
         tmin = min(row["time"] for row in timed_rows)
         tmax = min(max(row["time"] for row in timed_rows), 2.5 * tmin)
@@ -883,13 +887,14 @@ class ResultsParser:
         if team_time > tmax:
             return 0.0
 
-        # BAJA_RULES_2026 Rev A, D.6.6 (p. 108).
+        # BAJA_RULES_2026 Rev B, D.6.6 (p. 110).
         score = self.dynamic_event_points * (tmax - team_time) / (tmax - tmin)
         return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
     def _score_traction(self, team_time, team_distance, benchmark_rows):
         rows_with_distance = [
-            row for row in benchmark_rows if row.get("distance") is not None
+            row for row in benchmark_rows
+            if row.get("distance") is not None and not self._status_is_dq(row.get("status"))
         ]
         if not rows_with_distance or team_distance is None:
             return None
@@ -899,80 +904,72 @@ class ResultsParser:
         if self._is_close(dmax, 0.0):
             return None
 
-        successful_rows = [
-            row for row in rows_with_distance if self._status_is_success(row.get("status"))
+        # The results site marks partial runs "OK" too (e.g. every Passport
+        # Pull run), and only posts a time for runs that finished the course,
+        # so a run counts as complete only if it reached the longest distance
+        # with a time.
+        full_distance = dmax
+        full_distance_rows = [
+            row for row in rows_with_distance
+            if self._is_close(row["distance"], full_distance)
+            and row.get("time") is not None and row.get("time") > 0.0
         ]
-        if not successful_rows:
+        if not full_distance_rows:
             if self._is_close(dmax, dmin):
                 return self.dynamic_event_points
 
-            # BAJA_RULES_2026 Rev A, D.5.6.1 (p. 106).
+            # BAJA_RULES_2026 Rev B, D.5.6.1 (p. 108).
             score = self.dynamic_event_points * (team_distance - dmin) / (dmax - dmin)
             return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
-        full_distance = max(row["distance"] for row in successful_rows)
-        full_distance_rows = [
-            row for row in successful_rows if self._is_close(row["distance"], full_distance)
-        ]
-
-        if len(successful_rows) == len(rows_with_distance) and all(
-            self._is_close(row["distance"], full_distance) for row in rows_with_distance
-        ):
-            timed_rows = [
-                row for row in full_distance_rows
-                if row.get("time") is not None and row.get("time") > 0.0
-            ]
-            if team_time is None or not timed_rows:
+        if len(full_distance_rows) == len(rows_with_distance):
+            if team_time is None:
                 return None
+            if team_time <= 0.0:
+                return 0.0
 
-            tmin = min(row["time"] for row in timed_rows)
-            tmax = min(max(row["time"] for row in timed_rows), 2.5 * tmin)
+            tmin = min(row["time"] for row in full_distance_rows)
+            tmax = min(max(row["time"] for row in full_distance_rows), 2.5 * tmin)
             if self._is_close(tmax, tmin):
                 return self.dynamic_event_points
             if team_time > tmax:
                 return 0.0
 
-            # BAJA_RULES_2026 Rev A, D.5.6.2 (p. 106).
+            # BAJA_RULES_2026 Rev B, D.5.6.2 (p. 108).
             score = self.dynamic_event_points * (tmax - team_time) / (tmax - tmin)
             return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
-        timed_full_distance_rows = [
-            row for row in full_distance_rows
-            if row.get("time") is not None and row.get("time") > 0.0
-        ]
-        if not timed_full_distance_rows:
-            return None
-
-        tmin = min(row["time"] for row in timed_full_distance_rows)
+        tmin = min(row["time"] for row in full_distance_rows)
         group_one_scores = {
             row.get("car_no"): self.dynamic_event_points * (tmin / row["time"])
-            for row in timed_full_distance_rows
-            if row.get("time")
+            for row in full_distance_rows
         }
-        if not group_one_scores:
-            return None
 
-        if self._is_close(team_distance, full_distance):
-            if team_time is None:
-                return None
-
-            # BAJA_RULES_2026 Rev A, D.5.6.3 Group 1 (p. 107).
+        if (
+            self._is_close(team_distance, full_distance)
+            and team_time is not None
+            and team_time > 0.0
+        ):
+            # BAJA_RULES_2026 Rev B, D.5.6.3 Group 1 (pp. 108-109).
             score = self.dynamic_event_points * (tmin / team_time)
             return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
         lowest_group_one_score = min(group_one_scores.values())
-        # BAJA_RULES_2026 Rev A, D.5.6.3 Group 2 (p. 107).
+        # BAJA_RULES_2026 Rev B, D.5.6.3 Group 2 (p. 109).
         score = lowest_group_one_score * (team_distance / full_distance)
         return round(max(0.0, min(self.dynamic_event_points, score)), 2)
 
     def _score_endurance(self, team_row, benchmark_rows):
         team_laps = self._row_laps_value(team_row)
+        # Official results leave 0-lap cars out of Lmin and score them 0.
         rows_with_laps = [
             row for row in benchmark_rows
-            if self._row_laps_value(row) is not None
+            if self._row_laps_value(row) is not None and self._row_laps_value(row) > 0.0
         ]
         if team_laps is None or not rows_with_laps:
             return None
+        if team_laps <= 0.0:
+            return 0.0
 
         lap_counts = [self._row_laps_value(row) for row in rows_with_laps]
         lmax = max(lap_counts)
@@ -982,7 +979,7 @@ class ResultsParser:
         if self._is_close(lmax, lmin):
             base_score = self.endurance_event_points if lmax > 0.0 else 0.0
         else:
-            # BAJA_RULES_2026 Rev A, D.8.6.6 (pp. 114-115).
+            # BAJA_RULES_2026 Rev B, D.8.6.6 (pp. 116-117).
             base_score = self.endurance_event_points * (team_laps - lmin) / (lmax - lmin)
 
         score = base_score + bonus
@@ -1047,6 +1044,10 @@ class ResultsParser:
             return "Accel"
         if "hill" in normalized:
             return "Hill"
+        if "pull" in normalized:
+            return "Pull"
+        if "suspension" in normalized:
+            return "Susp"
         if "traction" in normalized:
             return "Trac"
         if "maneuver" in normalized:
@@ -1172,11 +1173,10 @@ class ResultsParser:
             return None
         return int(number)
 
-    def _status_is_success(self, status):
+    def _status_is_dq(self, status):
         if not status:
             return False
-        normalized = self._normalize_event_name(status)
-        return normalized in {"ok", "complete", "completed", "success"}
+        return self._normalize_event_name(status) in {"dq", "dnf", "dns"}
 
     def _normalize_event_name(self, value):
         return re.sub(r"[^a-z0-9]+", "", value.lower())
